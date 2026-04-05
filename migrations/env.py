@@ -7,6 +7,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from mimir.agent.models import Base  # noqa: F401 — imports all ORM models
+import mimir.rag.models  # noqa: F401 — registers DocumentChunk with Base.metadata
 from mimir.config import config as app_config
 
 alembic_config = context.config

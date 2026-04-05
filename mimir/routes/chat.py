@@ -9,6 +9,7 @@ from mimir.models import ChatRequest, ChatResponse
 from mimir.memory.semantic import SemanticMemory
 from mimir.llm.prompt import build_system_prompt
 from mimir.llm.client import llm_client
+from mimir.rag.retrieval import retrieve
 
 
 router = APIRouter()
@@ -26,7 +27,8 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     memory_content = semantic_memory.read()
 
-    rag_context = ""
+    rag_chunks = await retrieve(request.message, db)
+    rag_context = "\n\n---\n\n".join(rag_chunks)
 
     system_prompt = build_system_prompt(
         owner=config.owner_name,

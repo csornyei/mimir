@@ -15,6 +15,7 @@ class MimirConfig(BaseSettings):
     embedding_dimension: int = 768
 
     semantic_memory_path: str = "vault/memory.md"
+    vault_path: str = "vault"
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mimir"
 
