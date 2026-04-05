@@ -1,7 +1,10 @@
+import asyncio
+
 from httpx import AsyncClient
 
 from mimir.config import config
 from mimir.logger import logger
+from mimir.llm.embedding import embedding_model
 
 
 class LLMClient:
@@ -60,18 +63,10 @@ class LLMClient:
             raise
 
     async def embed(self, input: str) -> list[float]:
-        payload = {
-            "model": config.embedding_model,
-            "input": input,
-        }
-        headers = {}
-        if config.api_key:
-            headers["Authorization"] = f"Bearer {config.api_key}"
-        response = await self._client.post(
-            "/v1/embeddings", json=payload, headers=headers
-        )
-        response.raise_for_status()
-        return response.json()["data"][0]["embedding"]
+        return await asyncio.to_thread(embedding_model.embed, input)
+
+    async def embed_batch(self, inputs: list[str]) -> list[list[float]]:
+        return await asyncio.to_thread(embedding_model.embed_batch, inputs)
 
     async def close(self):
         await self._client.aclose()

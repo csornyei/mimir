@@ -26,9 +26,24 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     )
 
     memory_content = semantic_memory.read()
+    try:
+        rag_result = await retrieve(request.message, db)
 
-    rag_chunks = await retrieve(request.message, db)
-    rag_context = "\n\n---\n\n".join(rag_chunks)
+        context_sections = []
+        for content, metadata in rag_result:
+            logger.info(
+                f"Retrieved chunk with score {metadata.get('score'):.4f}", **metadata
+            )
+            source = metadata.get("file_name", "")
+            header = metadata.get("header", "")
+            page = metadata.get("page", "")
+            label = f"{source} {header} {f'(page {page})' if page else ''}".strip()
+            context_sections.append(f"{label}\n{content}")
+
+        rag_context = "\n\n---\n\n".join(context_sections)
+    except Exception as e:
+        logger.error(f"Error during retrieval: {e}")
+        rag_context = "Error while retrieving relevant information."
 
     system_prompt = build_system_prompt(
         owner=config.owner_name,

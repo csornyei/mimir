@@ -1,4 +1,8 @@
 import re
+import html
+import yaml
+from pathlib import Path
+
 
 _HEADER_RE = re.compile(r"^(#{2,3})\s+(.+)$", re.MULTILINE)
 
@@ -13,7 +17,45 @@ def _token_estimate(text: str) -> int:
     return int(len(text.split()) * _WORDS_PER_TOKEN)
 
 
-def _split_by_words(text: str, header_path: str) -> list[tuple[str, dict]]:
+def _cleanup_links(text: str) -> str:
+    # Remove Obsidian-style links [[Page Name]] or [[Page Name|Alias]]
+    return re.sub(r"\[\[([^|\]]+\|)?([^\]]+)\]\]", r"\2", text)
+
+
+def _cleanup_html(text: str) -> str:
+    text = re.sub(r"<[^>]+>", "", text)
+    return html.unescape(text)
+
+
+def _extract_tags(text: str) -> tuple[list[str], str]:
+    tags_re = re.compile(r"#([a-zA-Z0-9_/-]+)")
+
+    tags = tags_re.findall(text)
+    text_without_tags = tags_re.sub("", text)
+
+    return (tags, text_without_tags.strip())
+
+
+def _extract_frontmatter(text: str) -> tuple[dict, str]:
+    frontmatter_re = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+    match = frontmatter_re.match(text)
+    if not match:
+        return ({}, text)
+
+    frontmatter_str = match.group(1)
+    try:
+        frontmatter = yaml.safe_load(frontmatter_str)
+    except yaml.YAMLError:
+        frontmatter = {}
+
+    text_without_frontmatter = text[match.end() :].strip()
+
+    return (frontmatter, text_without_frontmatter)
+
+
+def _split_by_words(
+    text: str, header_path: str, metadata: dict, title: str = ""
+) -> list[tuple[str, dict]]:
     """Split a long text block into word-budget chunks with overlap."""
     words = text.split()
     chunks: list[tuple[str, dict]] = []
@@ -22,12 +64,14 @@ def _split_by_words(text: str, header_path: str) -> list[tuple[str, dict]]:
         end = start + _CHUNK_WORDS
         chunk_text = " ".join(words[start:end]).strip()
         if chunk_text:
-            chunks.append((chunk_text, {"header": header_path}))
+            chunks.append(
+                (f"{title}: {chunk_text}", {**metadata, "header": header_path})
+            )
         start += _CHUNK_WORDS - _OVERLAP_WORDS
     return chunks
 
 
-def chunk(text: str) -> list[tuple[str, dict]]:
+def chunk(text: str, file_name: str) -> list[tuple[str, dict]]:
     """
     Split Obsidian-flavoured Markdown into chunks.
 
@@ -39,11 +83,24 @@ def chunk(text: str) -> list[tuple[str, dict]]:
     Returns list of (chunk_text, metadata) where metadata contains the
     header path that produced the chunk.
     """
+
+    title = Path(file_name).stem.replace("_", " ").replace("-", " ")
+
+    tags, text = _extract_tags(text)
+    frontmatter, text = _extract_frontmatter(text)
+
+    if frontmatter and "tags" in frontmatter:
+        tags.extend(frontmatter["tags"])
+        del frontmatter["tags"]
+
+    metadata = {"file_name": file_name, "tags": tags, **frontmatter}
+
     # Find all header positions
     headers = list(_HEADER_RE.finditer(text))
 
     if not headers:
         # No headers — treat entire document as one section
+        text = _cleanup_links(_cleanup_html(text))
         sections = [("", text)]
     else:
         sections: list[tuple[str, str]] = []
@@ -52,15 +109,19 @@ def chunk(text: str) -> list[tuple[str, dict]]:
             section_start = match.end()
             section_end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
             body = text[section_start:section_end].strip()
+            body = _cleanup_links(body)
+            body = _cleanup_html(body)
+
             sections.append((header_text, body))
 
     chunks: list[tuple[str, dict]] = []
     for header, body in sections:
+        chunk_metadata = {**metadata, "header": header}
         if not body:
             continue
         if _token_estimate(body) <= _CHUNK_TOKENS:
-            chunks.append((body, {"header": header}))
+            chunks.append((f"{title}: {body}", chunk_metadata))
         else:
-            chunks.extend(_split_by_words(body, header))
+            chunks.extend(_split_by_words(body, header, chunk_metadata, title=title))
 
     return chunks

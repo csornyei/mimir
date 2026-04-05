@@ -9,9 +9,9 @@ async def retrieve(
     query: str,
     session: AsyncSession,
     top_k: int = 5,
-    threshold: float = 0.7,
+    threshold: float = 0.6,
     source_type: str | None = None,
-) -> list[str]:
+) -> list[tuple[str, dict]]:
     """
     Embed *query* and return the content of the most similar document chunks.
 
@@ -23,7 +23,10 @@ async def retrieve(
     stmt = (
         select(
             DocumentChunk.content,
-            (1 - DocumentChunk.embedding.cosine_distance(query_embedding)).label("score"),
+            DocumentChunk.metadata_,
+            (1 - DocumentChunk.embedding.cosine_distance(query_embedding)).label(
+                "score"
+            ),
         )
         .where(
             (1 - DocumentChunk.embedding.cosine_distance(query_embedding)) >= threshold
@@ -36,4 +39,4 @@ async def retrieve(
         stmt = stmt.where(DocumentChunk.source_type == source_type)
 
     result = await session.execute(stmt)
-    return [row.content for row in result]
+    return [(row.content, {**row.metadata_, "score": row.score}) for row in result]

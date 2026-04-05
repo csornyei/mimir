@@ -15,6 +15,21 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _parse_metadata(meta: dict) -> dict:
+    # Make sure all metadata is JSON-serializable, converting dates to ISO format, removing None values, etc.
+    parsed = {}
+    for key, value in meta.items():
+        if value is None:
+            continue
+        elif isinstance(value, (str, int, float, bool)):
+            parsed[key] = value
+        elif hasattr(value, "isoformat"):
+            parsed[key] = value.isoformat()
+        else:
+            parsed[key] = str(value)
+    return parsed
+
+
 async def ingest_file(path: Path, session: AsyncSession) -> int:
     """
     Ingest a single file into the document_chunks table.
@@ -51,20 +66,24 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
 
     # Chunk the file
     if suffix == ".md":
-        raw_chunks = markdown.chunk(path.read_text(encoding="utf-8"))
+        raw_chunks = markdown.chunk(
+            path.read_text(encoding="utf-8"), file_name=path.name
+        )
         source_type = "markdown"
     else:
-        raw_chunks = pdf.chunk(path)
+        raw_chunks = pdf.chunk(path, file_name=path.name)
         source_type = "pdf"
 
     if not raw_chunks:
         logger.warning("No chunks produced", path=source_path)
         return 0
 
-    # Embed and insert
-    inserted = 0
-    for index, (text, meta) in enumerate(raw_chunks):
-        embedding = await llm_client.embed(text)
+    # Embed all chunks in a single batch call, offloaded to a thread
+    # to avoid blocking the event loop during model inference
+    texts = [text for text, _ in raw_chunks]
+    embeddings = await llm_client.embed_batch(texts)
+
+    for index, ((text, meta), embedding) in enumerate(zip(raw_chunks, embeddings)):
         session.add(
             DocumentChunk(
                 content=text,
@@ -73,10 +92,12 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
                 source_type=source_type,
                 chunk_index=index,
                 content_hash=content_hash,
-                metadata_=meta,
+                metadata_=_parse_metadata(meta),
             )
         )
-        inserted += 1
+    inserted = len(raw_chunks)
 
-    logger.info("Ingested file", path=source_path, chunks=inserted, source_type=source_type)
+    logger.info(
+        "Ingested file", path=source_path, chunks=inserted, source_type=source_type
+    )
     return inserted
