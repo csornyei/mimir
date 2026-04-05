@@ -17,5 +17,8 @@ class MimirConfig(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mimir"
 
+    slack_bot_token: str
+    slack_app_token: str
+
 
 config = MimirConfig()

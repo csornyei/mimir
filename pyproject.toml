@@ -5,6 +5,7 @@ description = "Self-hosted AI assistant."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "aiohttp>=3.13.5",
     "alembic>=1.18.4",
     "asyncpg>=0.31.0",
     "fastapi[standard]>=0.135.3",
@@ -12,6 +13,7 @@ dependencies = [
     "pgvector>=0.4.2",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
+    "slack-bolt>=1.27.0",
     "sqlalchemy[asyncio]>=2.0.49",
     "structlog>=25.5.0",
 ]
