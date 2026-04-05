@@ -15,5 +15,7 @@ class MimirConfig(BaseSettings):
 
     semantic_memory_path: str = "vault/memory.md"
 
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mimir"
+
 
 config = MimirConfig()
