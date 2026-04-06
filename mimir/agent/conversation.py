@@ -3,7 +3,7 @@ from datetime import datetime, UTC
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mimir.agent.models import ConversationModel, MessageModel
+from mimir.models import ConversationModel, MessageModel
 
 
 class ConversationManager:
@@ -20,7 +20,9 @@ class ConversationManager:
     async def add_message(
         self, session: AsyncSession, conversation_id: str, role: str, content: str
     ) -> None:
-        session.add(MessageModel(conversation_id=conversation_id, role=role, content=content))
+        session.add(
+            MessageModel(conversation_id=conversation_id, role=role, content=content)
+        )
         await session.execute(
             update(ConversationModel)
             .where(ConversationModel.id == conversation_id)

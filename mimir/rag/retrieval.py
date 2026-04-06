@@ -2,7 +2,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.llm.client import llm_client
-from mimir.rag.models import DocumentChunk
+from mimir.models import DocumentChunk
 
 
 async def retrieve(

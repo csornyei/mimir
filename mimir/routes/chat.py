@@ -5,9 +5,10 @@ from mimir.db import get_db
 from mimir.logger import logger
 from mimir.config import config
 from mimir.agent.conversation import conversation_manager
-from mimir.models import ChatRequest, ChatResponse
+from mimir.schemas import ChatRequest, ChatResponse
 from mimir.memory.semantic import SemanticMemory
-from mimir.llm.prompt import build_system_prompt
+from mimir.memory.episodic import EpisodicMemory
+from mimir.llm.prompt import build_system_prompt, format_episodic_context
 from mimir.llm.client import llm_client
 from mimir.rag.retrieval import retrieve
 
@@ -45,9 +46,21 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         logger.error(f"Error during retrieval: {e}")
         rag_context = "Error while retrieving relevant information."
 
+    try:
+        episodic_mem = EpisodicMemory(db)
+        episodic_memories = await episodic_mem.retrieve(
+            request.message, k=config.episodic_retrieval_k
+        )
+        episodic_context = format_episodic_context(episodic_memories)
+        logger.info("episodic_retrieval", count=len(episodic_memories))
+    except Exception as e:
+        logger.error(f"Error during episodic retrieval: {e}")
+        episodic_context = ""
+
     system_prompt = build_system_prompt(
         owner=config.owner_name,
         semantic_memory=memory_content,
+        episodic_context=episodic_context,
         rag_context=rag_context,
     )
 

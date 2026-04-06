@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.llm.client import llm_client
 from mimir.logger import logger
-from mimir.rag.models import DocumentChunk
+from mimir.models import DocumentChunk
 from mimir.rag.sources import markdown, pdf
 
 

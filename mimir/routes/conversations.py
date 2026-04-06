@@ -2,9 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mimir.agent.models import ConversationModel, MessageModel
+from mimir.models import ConversationModel, MessageModel
 from mimir.db import get_db
-from mimir.models import ConversationDetail, ConversationSummary, MessageResponse
+from mimir.schemas import ConversationDetail, ConversationSummary, MessageResponse
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -46,7 +46,12 @@ async def get_conversation(
         id=conversation.id,
         created_at=conversation.created_at,
         last_active=conversation.last_active,
-        messages=[MessageResponse(id=m.id, role=m.role, content=m.content, timestamp=m.timestamp) for m in messages],
+        messages=[
+            MessageResponse(
+                id=m.id, role=m.role, content=m.content, timestamp=m.timestamp
+            )
+            for m in messages
+        ],
         total=total,
         limit=limit,
         offset=offset,

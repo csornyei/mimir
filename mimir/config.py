@@ -22,5 +22,10 @@ class MimirConfig(BaseSettings):
     slack_bot_token: str
     slack_app_token: str
 
+    episodic_idle_minutes: int = 30
+    episodic_retrieval_k: int = 3
+    episodic_max_retries: int = 3
+    episodic_new_messages_threshold: int = 5
+
 
 config = MimirConfig()
