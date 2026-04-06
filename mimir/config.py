@@ -19,6 +19,8 @@ class MimirConfig(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mimir"
 
+    agent_url: str = "http://127.0.0.1:8000"
+
     slack_bot_token: str
     slack_app_token: str
 

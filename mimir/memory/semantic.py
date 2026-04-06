@@ -10,8 +10,8 @@ class SemanticMemory:
     The agent treats it as the source of truth for facts about the user.
     """
 
-    def __init__(self):
-        self._path: Path = Path(config.semantic_memory_path)
+    def __init__(self, path: str | Path | None = None):
+        self._path: Path = Path(path) if path is not None else Path(config.semantic_memory_path)
 
     def read(self) -> str:
         if not self._path.exists():

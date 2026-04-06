@@ -1,0 +1,50 @@
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrations
+    env_file: .env
+    profiles:
+      - migrate
+    restart: "no"
+
+  mimir-api:
+    build: .
+    command: uv run fastapi run mimir/main.py --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      VAULT_PATH: /vault
+      SEMANTIC_MEMORY_PATH: /vault/memory.md
+      ENV: production
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
+    volumes:
+      - ${VAULT_PATH:-./vault}:/vault
+      - ./scratch/memory.md:/vault/memory.md
+    restart: unless-stopped
+
+  mimir-slack:
+    build: .
+    command: uv run python -m mimir.interfaces.slack.bot
+    env_file: .env
+    environment:
+      AGENT_URL: http://mimir-api:8000
+      ENV: production
+    depends_on:
+      - mimir-api
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg18-trixie
+    environment:
+      POSTGRES_USER: mimir
+      POSTGRES_PASSWORD: mimir
+      POSTGRES_DB: mimir
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  pgdata:

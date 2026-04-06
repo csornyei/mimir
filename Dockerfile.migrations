@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+
+WORKDIR /app
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+# Install dependencies (no embedding model needed here).
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project
+
+# Copy source, migrations config, and migration versions.
+COPY mimir/ mimir/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+COPY alembic.ini ./
+COPY migrations/ migrations/
+
+CMD ["uv", "run", "alembic", "upgrade", "head"]

@@ -5,10 +5,10 @@ from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from mimir.config import config
 from mimir.logger import logger
 
-from mimir.models import ChatRequest, ChatResponse
+from mimir.schemas import ChatRequest, ChatResponse
 
 app = AsyncApp(token=config.slack_bot_token)
-_agent_url = "http://127.0.0.1:8000"
+_agent_url = config.agent_url
 _bot_user_id: str | None = None
 
 

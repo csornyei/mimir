@@ -44,7 +44,7 @@ def _extract_frontmatter(text: str) -> tuple[dict, str]:
 
     frontmatter_str = match.group(1)
     try:
-        frontmatter = yaml.safe_load(frontmatter_str)
+        frontmatter = yaml.safe_load(frontmatter_str) or {}
     except yaml.YAMLError:
         frontmatter = {}
 
