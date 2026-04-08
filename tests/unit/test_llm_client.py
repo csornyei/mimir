@@ -1,8 +1,29 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from httpx import HTTPStatusError, Request, Response
 
 from mimir.llm.client import LLMClient
+
+
+def _413_error() -> HTTPStatusError:
+    req = Request("POST", "http://test/v1/chat/completions")
+    resp = Response(413, request=req)
+    return HTTPStatusError("413 Payload Too Large", request=req, response=resp)
+
+
+def _http_error(status: int) -> HTTPStatusError:
+    req = Request("POST", "http://test/v1/chat/completions")
+    resp = Response(status, request=req)
+    return HTTPStatusError(f"{status} Error", request=req, response=resp)
+
+
+def _413_response() -> MagicMock:
+    resp = MagicMock()
+    resp.status_code = 413
+    resp.text = "Request too large"
+    resp.raise_for_status.side_effect = _413_error()
+    return resp
 
 
 def _make_client(mock_http: AsyncMock) -> LLMClient:
@@ -128,6 +149,116 @@ async def test_complete_custom_max_tokens(mocker):
 
     payload = http.post.call_args[1]["json"]
     assert payload["max_tokens"] == 512
+
+
+# ---------------------------------------------------------------------------
+# complete() — 413 fallback retry
+# ---------------------------------------------------------------------------
+
+
+async def test_complete_uses_fallback_on_413(mocker):
+    mocker.patch("mimir.llm.client.embedding_model")
+    http = AsyncMock()
+    # First attempt → 413, second attempt (fallback) → 200
+    http.post.side_effect = [_413_response(), _ok_response("fallback response")]
+    client = _make_client(http)
+
+    fallback_msgs = [{"role": "user", "content": "shorter"}]
+    result = await client.complete(
+        [{"role": "user", "content": "Hi"}],
+        fallbacks=[fallback_msgs],
+    )
+
+    assert result == "fallback response"
+    assert http.post.call_count == 2
+
+
+async def test_complete_uses_second_fallback_when_first_also_413(mocker):
+    mocker.patch("mimir.llm.client.embedding_model")
+    http = AsyncMock()
+    # First two attempts → 413, third → 200
+    http.post.side_effect = [
+        _413_response(),
+        _413_response(),
+        _ok_response("minimal response"),
+    ]
+    client = _make_client(http)
+
+    result = await client.complete(
+        [{"role": "user", "content": "original"}],
+        fallbacks=[
+            [{"role": "user", "content": "reduced"}],
+            [{"role": "user", "content": "minimal"}],
+        ],
+    )
+
+    assert result == "minimal response"
+    assert http.post.call_count == 3
+
+
+async def test_complete_re_raises_when_all_fallbacks_exhausted(mocker):
+    mocker.patch("mimir.llm.client.embedding_model")
+    http = AsyncMock()
+    http.post.side_effect = [_413_response(), _413_response()]
+    client = _make_client(http)
+
+    with pytest.raises(HTTPStatusError) as exc_info:
+        await client.complete(
+            [{"role": "user", "content": "original"}],
+            fallbacks=[[{"role": "user", "content": "fallback"}]],
+        )
+
+    assert exc_info.value.response.status_code == 413
+
+
+async def test_complete_413_no_fallbacks_re_raises(mocker):
+    mocker.patch("mimir.llm.client.embedding_model")
+    http = AsyncMock()
+    http.post.return_value = _413_response()
+    client = _make_client(http)
+
+    with pytest.raises(HTTPStatusError) as exc_info:
+        await client.complete([{"role": "user", "content": "Hi"}])
+
+    assert exc_info.value.response.status_code == 413
+    assert http.post.call_count == 1
+
+
+async def test_complete_non_413_http_error_not_retried(mocker):
+    mocker.patch("mimir.llm.client.embedding_model")
+    http = AsyncMock()
+    resp = MagicMock()
+    resp.status_code = 500
+    resp.text = "Internal Server Error"
+    resp.raise_for_status.side_effect = _http_error(500)
+    http.post.return_value = resp
+    client = _make_client(http)
+
+    fallback_msgs = [{"role": "user", "content": "fallback"}]
+    with pytest.raises(HTTPStatusError) as exc_info:
+        await client.complete(
+            [{"role": "user", "content": "Hi"}],
+            fallbacks=[fallback_msgs],
+        )
+
+    # Must not have tried the fallback
+    assert http.post.call_count == 1
+    assert exc_info.value.response.status_code == 500
+
+
+async def test_complete_fallback_uses_correct_messages(mocker):
+    mocker.patch("mimir.llm.client.embedding_model")
+    http = AsyncMock()
+    http.post.side_effect = [_413_response(), _ok_response("ok")]
+    client = _make_client(http)
+
+    original = [{"role": "user", "content": "original"}]
+    fallback = [{"role": "user", "content": "fallback content"}]
+    await client.complete(original, fallbacks=[fallback])
+
+    # Second call should use the fallback messages
+    second_call_payload = http.post.call_args_list[1][1]["json"]
+    assert second_call_payload["messages"] == fallback
 
 
 # ---------------------------------------------------------------------------

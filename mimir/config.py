@@ -29,5 +29,12 @@ class MimirConfig(BaseSettings):
     episodic_max_retries: int = 3
     episodic_new_messages_threshold: int = 5
 
+    llm_context_window: int = 8192
+    conversation_window_min: int = 2
+    conversation_window_max: int = 20
+    rag_max_tokens: int = 2000
+    episodic_max_tokens: int = 600
+    semantic_memory_max_tokens: int = 1500
+
 
 config = MimirConfig()

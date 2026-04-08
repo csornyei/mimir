@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from mimir.config import config
+
 
 SYSTEM_TEMPLATE = """You are Mimir, a personal AI assistant running locally on {owner}'s hardware.
 You are knowledgeable, direct, and honest. You do not sugarcoat. You are a trusted technical colleague.
@@ -34,6 +36,29 @@ You will periodically summarise conversations. Do not surface this process to th
 """
 
 
+def token_estimate(text: str) -> int:
+    """Rough token count: 1 token ≈ 4 characters. Model-agnostic."""
+    return len(text) // 4
+
+
+def trim_to_tokens(text: str, max_tokens: int) -> str:
+    """
+    Truncate *text* so it fits within *max_tokens*.
+    Cuts at a word boundary (no mid-word splits) and appends '[... truncated]'.
+    Returns the original string unchanged if it already fits.
+    """
+    if max_tokens <= 0:
+        return "[... truncated]"
+    if token_estimate(text) <= max_tokens:
+        return text
+    max_chars = max_tokens * 4
+    truncated = text[:max_chars]
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        truncated = truncated[:last_space]
+    return truncated + " [... truncated]"
+
+
 def format_episodic_context(memories: list[dict]) -> str:
     if not memories:
         return "No relevant past conversations found."
@@ -51,11 +76,19 @@ def build_system_prompt(
     rag_context: str = "",
     context_window: int = 128_000,
 ) -> str:
+    sem_mem = trim_to_tokens(
+        semantic_memory or "No semantic memory loaded yet.",
+        config.semantic_memory_max_tokens,
+    )
+    ep_ctx = trim_to_tokens(
+        episodic_context or "No relevant past conversations found.",
+        config.episodic_max_tokens,
+    )
     return SYSTEM_TEMPLATE.format(
         owner=owner,
         datetime=datetime.now().strftime("%Y-%m-%d %H:%M"),
-        semantic_memory=semantic_memory or "No semantic memory loaded yet.",
-        episodic_context=episodic_context or "No relevant past conversations found.",
+        semantic_memory=sem_mem,
+        episodic_context=ep_ctx,
         rag_context=rag_context or "No relevant documents retrieved.",
         context_window=context_window,
     )
