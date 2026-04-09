@@ -64,7 +64,9 @@ def test_split_by_words_single_chunk_short_text():
 def test_split_by_words_multiple_chunks_long_text():
     words = ["word"] * 500
     text = " ".join(words)
-    result = _split_by_words(text, page=2, metadata={"source_type": "pdf"}, file_name="doc.pdf")
+    result = _split_by_words(
+        text, page=2, metadata={"source_type": "pdf"}, file_name="doc.pdf"
+    )
     assert len(result) > 1
     for _, meta in result:
         assert meta["page"] == 2
@@ -113,13 +115,17 @@ def multipage_pdf(tmp_path):
     doc = fitz.open()
 
     page1 = doc.new_page()
-    page1.insert_text((50, 72), "Page one has a full paragraph of interesting content here.")
+    page1.insert_text(
+        (50, 72), "Page one has a full paragraph of interesting content here."
+    )
 
     page2 = doc.new_page()
     page2.insert_text((50, 72), "Tiny")  # < 20 chars → skipped
 
     page3 = doc.new_page()
-    page3.insert_text((50, 72), "Page three also has a decent amount of readable text content.")
+    page3.insert_text(
+        (50, 72), "Page three also has a decent amount of readable text content."
+    )
 
     path = tmp_path / "multi.pdf"
     doc.save(str(path))

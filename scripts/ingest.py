@@ -22,8 +22,10 @@ async def run(root: Path, type_filter: str | None) -> None:
     suffix_filter = _TYPE_FILTER.get(type_filter) if type_filter else None
 
     files = [
-        p for p in root.rglob("*")
-        if p.is_file() and p.suffix.lower() in _SUPPORTED
+        p
+        for p in root.rglob("*")
+        if p.is_file()
+        and p.suffix.lower() in _SUPPORTED
         and (suffix_filter is None or p.suffix.lower() == suffix_filter)
     ]
 
@@ -43,14 +45,23 @@ async def run(root: Path, type_filter: str | None) -> None:
                 logger.error("Failed to ingest file", path=str(file), error=str(e))
         await session.commit()
 
-    logger.info("Bulk ingestion complete", total_files=len(files), total_chunks=total_chunks)
+    logger.info(
+        "Bulk ingestion complete", total_files=len(files), total_chunks=total_chunks
+    )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Bulk ingest files into Mimir RAG index.")
-    parser.add_argument("--path", required=True, type=Path, help="Root directory to ingest")
+    parser = argparse.ArgumentParser(
+        description="Bulk ingest files into Mimir RAG index."
+    )
     parser.add_argument(
-        "--type", choices=["markdown", "pdf"], default=None, help="Restrict to one file type"
+        "--path", required=True, type=Path, help="Root directory to ingest"
+    )
+    parser.add_argument(
+        "--type",
+        choices=["markdown", "pdf"],
+        default=None,
+        help="Restrict to one file type",
     )
     args = parser.parse_args()
 

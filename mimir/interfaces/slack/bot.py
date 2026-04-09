@@ -39,7 +39,9 @@ async def _send_to_agent(channel_id: str, user_id: str, text: str) -> str:
             user_id=user_id,
         )
 
-        logger.info("Sending message to agent", conversation_id=channel_id, user_id=user_id)
+        logger.info(
+            "Sending message to agent", conversation_id=channel_id, user_id=user_id
+        )
 
         try:
             response = await client.post(
@@ -56,7 +58,9 @@ async def _send_to_agent(channel_id: str, user_id: str, text: str) -> str:
             )
             raise
         except httpx.RequestError as e:
-            logger.error("Failed to reach agent", error=str(e), conversation_id=channel_id)
+            logger.error(
+                "Failed to reach agent", error=str(e), conversation_id=channel_id
+            )
             raise
 
         chat_response = ChatResponse.model_validate(response.json())
@@ -74,7 +78,10 @@ async def handle_mention(event: dict, say, client):
         reply = await _send_to_agent(_conversation_id(event), event["user"], text)
     except Exception as e:
         logger.error("Failed to handle mention", error=str(e), user=event["user"])
-        await say(text="Sorry, something went wrong.", thread_ts=event.get("thread_ts") or event["ts"])
+        await say(
+            text="Sorry, something went wrong.",
+            thread_ts=event.get("thread_ts") or event["ts"],
+        )
         return
 
     await say(text=reply, thread_ts=event.get("thread_ts") or event["ts"])
@@ -119,13 +126,17 @@ async def handle_message(event: dict, say, client):
         )
 
         if already_in_thread:
-            logger.info("Handling thread reply", user=event["user"], thread_ts=thread_ts)
+            logger.info(
+                "Handling thread reply", user=event["user"], thread_ts=thread_ts
+            )
             try:
                 reply = await _send_to_agent(
                     _conversation_id(event), event["user"], event.get("text", "")
                 )
             except Exception as e:
-                logger.error("Failed to handle thread reply", error=str(e), user=event["user"])
+                logger.error(
+                    "Failed to handle thread reply", error=str(e), user=event["user"]
+                )
                 await say(text="Sorry, something went wrong.", thread_ts=thread_ts)
                 return
             await say(text=reply, thread_ts=thread_ts)

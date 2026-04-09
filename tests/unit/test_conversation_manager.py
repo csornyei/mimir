@@ -42,7 +42,7 @@ async def test_get_or_create_returns_existing(manager, session):
 async def test_get_or_create_creates_new_when_missing(manager, session):
     session.get.return_value = None
 
-    result = await manager.get_or_create_conversation(session, "new-conv")
+    await manager.get_or_create_conversation(session, "new-conv")
 
     session.add.assert_called_once()
     added = session.add.call_args[0][0]

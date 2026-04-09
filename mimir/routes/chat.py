@@ -8,7 +8,11 @@ from mimir.agent.conversation import conversation_manager
 from mimir.schemas import ChatRequest, ChatResponse
 from mimir.memory.semantic import SemanticMemory
 from mimir.memory.episodic import EpisodicMemory
-from mimir.llm.prompt import build_system_prompt, format_episodic_context, token_estimate
+from mimir.llm.prompt import (
+    build_system_prompt,
+    format_episodic_context,
+    token_estimate,
+)
 from mimir.llm.client import llm_client
 from mimir.rag.retrieval import retrieve
 
@@ -109,14 +113,12 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         semantic_memory="",
         context_window=config.llm_context_window,
     )
-    messages_reduced = (
-        [{"role": "system", "content": system_prompt_reduced}]
-        + conversation_messages[-5:]
-    )
-    messages_minimal = (
-        [{"role": "system", "content": system_prompt_minimal}]
-        + conversation_messages[-config.conversation_window_min :]
-    )
+    messages_reduced = [
+        {"role": "system", "content": system_prompt_reduced}
+    ] + conversation_messages[-5:]
+    messages_minimal = [
+        {"role": "system", "content": system_prompt_minimal}
+    ] + conversation_messages[-config.conversation_window_min :]
 
     result = await llm_client.complete(
         messages=messages,

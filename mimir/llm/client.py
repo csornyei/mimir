@@ -62,13 +62,11 @@ class LLMClient:
                 if "choices" in result and len(result["choices"]) > 0:
                     return result["choices"][0]["message"]["content"]
 
-                return {"error": "No choices returned from LLM"}
+                return '{"error": "No choices returned from LLM"}'
 
             except HTTPStatusError as e:
                 if e.response.status_code == 413:
-                    estimated_tokens = sum(
-                        len(m.get("content", "")) // 4 for m in msgs
-                    )
+                    estimated_tokens = sum(len(m.get("content", "")) // 4 for m in msgs)
                     logger.warning(
                         "llm_payload_too_large",
                         attempt=attempt,
@@ -88,7 +86,7 @@ class LLMClient:
             "All payload fallbacks exhausted",
             attempts=len(candidates),
         )
-        raise last_413
+        raise last_413 or Exception("All payload fallbacks exhausted")
 
     async def embed(self, input: str) -> list[float]:
         return await asyncio.to_thread(embedding_model.embed, input)

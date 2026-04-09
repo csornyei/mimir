@@ -1,4 +1,3 @@
-import pytest
 from mimir.rag.sources.markdown import (
     _cleanup_html,
     _cleanup_links,

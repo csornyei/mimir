@@ -1,7 +1,13 @@
 import asyncio
 from pathlib import Path
 
-from watchdog.events import FileCreatedEvent, FileModifiedEvent, FileSystemEventHandler
+from watchdog.events import (
+    FileCreatedEvent,
+    FileModifiedEvent,
+    FileSystemEventHandler,
+    DirCreatedEvent,
+    DirModifiedEvent,
+)
 from watchdog.observers import Observer
 
 from mimir.config import config
@@ -32,18 +38,18 @@ class _VaultEventHandler(FileSystemEventHandler):
         except Exception as e:
             logger.error("Auto-ingestion failed", path=str(path), error=str(e))
 
-    def on_created(self, event: FileCreatedEvent) -> None:  # type: ignore[override]
+    def on_created(self, event: FileCreatedEvent | DirCreatedEvent) -> None:
         if not event.is_directory:
-            self._schedule(event.src_path)
+            self._schedule(f"{event.src_path}")
 
-    def on_modified(self, event: FileModifiedEvent) -> None:  # type: ignore[override]
+    def on_modified(self, event: FileModifiedEvent | DirModifiedEvent) -> None:
         if not event.is_directory:
-            self._schedule(event.src_path)
+            self._schedule(f"{event.src_path}")
 
 
 class AsyncFileWatcher:
     def __init__(self) -> None:
-        self._observer: Observer | None = None
+        self._observer: Observer | None = None  # type: ignore
 
     async def start(self) -> None:
         vault_path = config.vault_path

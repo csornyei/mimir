@@ -11,7 +11,9 @@ class SemanticMemory:
     """
 
     def __init__(self, path: str | Path | None = None):
-        self._path: Path = Path(path) if path is not None else Path(config.semantic_memory_path)
+        self._path: Path = (
+            Path(path) if path is not None else Path(config.semantic_memory_path)
+        )
 
     def read(self) -> str:
         if not self._path.exists():

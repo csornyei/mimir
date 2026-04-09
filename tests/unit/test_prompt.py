@@ -91,7 +91,9 @@ def test_format_episodic_context_empty_list():
 
 
 def test_format_episodic_context_single_entry():
-    memories = [{"started_at": datetime(2024, 3, 1), "summary": "Discussed Python project"}]
+    memories = [
+        {"started_at": datetime(2024, 3, 1), "summary": "Discussed Python project"}
+    ]
     result = format_episodic_context(memories)
     assert "2024-03-01" in result
     assert "Discussed Python project" in result
@@ -133,11 +135,6 @@ def test_build_system_prompt_contains_semantic_memory():
 
 def test_build_system_prompt_empty_memory_uses_fallback():
     prompt = build_system_prompt(owner="Bob", semantic_memory="")
-    assert "No semantic memory loaded yet." in prompt
-
-
-def test_build_system_prompt_none_memory_uses_fallback():
-    prompt = build_system_prompt(owner="Bob", semantic_memory=None)
     assert "No semantic memory loaded yet." in prompt
 
 

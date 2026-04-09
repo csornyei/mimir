@@ -49,6 +49,8 @@ async def consolidate_idle_threads() -> None:
                     MessageModel.timestamp > conv.consolidated_at,
                 )
             )
+            if new_count is None:
+                continue
             if new_count >= config.episodic_new_messages_threshold:
                 re_consolidation_ids.append(conv.id)
 
@@ -75,7 +77,8 @@ async def consolidate_idle_threads() -> None:
                     update(ConversationModel)
                     .where(ConversationModel.id == thread_id)
                     .values(
-                        consolidation_retries=ConversationModel.consolidation_retries + 1
+                        consolidation_retries=ConversationModel.consolidation_retries
+                        + 1
                     )
                 )
                 await session.commit()

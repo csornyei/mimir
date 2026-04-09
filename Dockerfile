@@ -1,25 +1,23 @@
-# syntax=docker/dockerfile:1
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+FROM python:3.13-slim
+COPY --from=ghcr.io/astral-sh/uv:0.11.5 /uv /uvx /bin/
 
 WORKDIR /app
 
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    # Keep HuggingFace model cache inside the image at a predictable path.
-    HF_HOME=/app/.cache/huggingface
+ENV HF_HOME=/app/.cache/huggingface
+ENV UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1
 
-# Install dependencies first (separate layer — rebuilds only when lockfile changes).
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project
+
+COPY scripts/load_embedding_model.py load_embedding_model.py
+
+RUN uv run python load_embedding_model.py
+
+COPY mimir mimir/
 COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project
 
-# Copy source and install the project itself.
-COPY mimir/ mimir/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
-
-# Pre-download the embedding model so containers start without a network hit.
-# The model name matches the default in config.py / embedding.py.
-RUN uv run python -c "\
-from sentence_transformers import SentenceTransformer; \
-SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True)"
+    uv sync --locked

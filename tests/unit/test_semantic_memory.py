@@ -41,7 +41,9 @@ def test_read_utf8(tmp_path):
 
 def test_write_creates_file(mem, tmp_path):
     mem.write("# Memory\n- Fact one")
-    assert (tmp_path / "memory.md").read_text(encoding="utf-8") == "# Memory\n- Fact one"
+    assert (tmp_path / "memory.md").read_text(
+        encoding="utf-8"
+    ) == "# Memory\n- Fact one"
 
 
 def test_write_overwrites_existing(mem, tmp_path):

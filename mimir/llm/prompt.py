@@ -64,7 +64,9 @@ def format_episodic_context(memories: list[dict]) -> str:
         return "No relevant past conversations found."
     lines = []
     for m in memories:
-        date = m["started_at"].strftime("%Y-%m-%d") if m["started_at"] else "unknown date"
+        date = (
+            m["started_at"].strftime("%Y-%m-%d") if m["started_at"] else "unknown date"
+        )
         lines.append(f"- ({date}) {m['summary']}")
     return "\n".join(lines)
 
