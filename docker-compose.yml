@@ -2,14 +2,16 @@ services:
   migrate:
     build:
       context: .
-      dockerfile: Dockerfile.migrations
+      dockerfile: docker/Dockerfile.migrations
     env_file: .env
     profiles:
       - migrate
     restart: "no"
 
   mimir-api:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     command: uv run fastapi run mimir/main.py --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
@@ -25,7 +27,9 @@ services:
     restart: unless-stopped
 
   mimir-slack:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.slack
     command: uv run python -m mimir.interfaces.slack.bot
     env_file: .env
     environment:

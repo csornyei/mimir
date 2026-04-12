@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
 
+from mimir.agent.approval import manager as approval_manager
 from mimir.config import config
 from mimir.db import get_session
 from mimir.logger import logger
@@ -82,3 +83,9 @@ async def consolidate_idle_threads() -> None:
                     )
                 )
                 await session.commit()
+
+
+async def process_approval_timeouts() -> None:
+    """Scheduled job (runs every minute) that auto-rejects timed-out approval requests."""
+    async with get_session() as session:
+        await approval_manager.process_timeouts(session)

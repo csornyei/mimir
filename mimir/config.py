@@ -1,3 +1,4 @@
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,20 @@ class MimirConfig(BaseSettings):
 
     slack_bot_token: str = ""
     slack_app_token: str = ""
+
+    # Approval flow
+    approval_timeout_minutes: int = 10
+    approval_discuss_timeout_hours: int = 24  # 0 = no timeout for DISCUSSING state
+    slack_dm_channel_id: str = ""
+    approval_reinvoke_llm: bool = True  # re-invoke LLM with tool result after approval
+    write_tools: list[str] = Field(default_factory=list)
+
+    @field_validator("write_tools", mode="before")
+    @classmethod
+    def _parse_write_tools(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [t.strip() for t in v.split(",") if t.strip()]
+        return v
 
     episodic_idle_minutes: int = 30
     episodic_retrieval_k: int = 3

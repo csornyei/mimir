@@ -5,9 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from mimir.config import config
 
-# Base is defined in mimir.models to avoid circular imports.
-# Import it here so existing code that does `from mimir.db import Base` keeps working.
-from mimir.models import Base  # noqa: F401
+# Re-export Base so existing code that does `from mimir.db import Base` keeps working.
+from mimir.base import Base  # noqa: F401
 
 engine = create_async_engine(config.database_url)
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)

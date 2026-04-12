@@ -6,7 +6,7 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from mimir.models import Base  # noqa: F401 — all ORM models registered
+from mimir.base import Base
 from mimir.config import config as app_config
 
 alembic_config = context.config

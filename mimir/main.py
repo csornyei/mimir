@@ -8,10 +8,11 @@ from mimir.db import engine
 from mimir.llm.client import llm_client
 from mimir.memory.semantic import SemanticMemory
 from mimir.rag.watcher import AsyncFileWatcher
+from mimir.routes.approvals import router as approvals_router
 from mimir.routes.chat import router as chat_router
 from mimir.routes.conversations import router as conversations_router
 from mimir.routes.ingest import router as ingest_router
-from mimir.scheduler.jobs import consolidate_idle_threads
+from mimir.scheduler.jobs import consolidate_idle_threads, process_approval_timeouts
 
 
 @asynccontextmanager
@@ -21,6 +22,12 @@ async def lifespan(app: FastAPI):
         consolidate_idle_threads,
         IntervalTrigger(minutes=5),
         id="consolidate_idle_threads",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        process_approval_timeouts,
+        IntervalTrigger(minutes=1),
+        id="process_approval_timeouts",
         replace_existing=True,
     )
     scheduler.start()
@@ -38,6 +45,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(conversations_router, prefix="/api", tags=["conversations"])
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(ingest_router, prefix="/api", tags=["ingest"])
+app.include_router(approvals_router, prefix="/api", tags=["approvals"])
 
 semantic_memory = SemanticMemory()
 

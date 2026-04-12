@@ -1,8 +1,10 @@
+import enum
 from datetime import datetime
 from uuid import UUID
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Enum,
     DateTime,
     ForeignKey,
     Index,
@@ -12,11 +14,9 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    pass
+from mimir.base import Base
 
 
 # ---------------------------------------------------------------------------
@@ -118,4 +118,57 @@ class DocumentChunk(Base):
     __table_args__ = (
         Index("ix_document_chunks_source_path", "source_path"),
         Index("ix_document_chunks_source_type", "source_type"),
+    )
+
+
+class ActionStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+    discussing = "discussing"
+    completed = "completed"
+
+
+class ActionType(str, enum.Enum):
+    tool_call = "tool_call"
+    memory_write = "memory_write"
+
+
+class PendingActionModel(Base):
+    __tablename__ = "pending_actions"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=func.gen_random_uuid(),
+    )
+    action_type: Mapped[ActionType] = mapped_column(
+        Enum(ActionType, name="action_type", create_type=True),
+        nullable=False,
+    )
+    status: Mapped[ActionStatus] = mapped_column(
+        Enum(ActionStatus, name="action_status", create_type=True),
+        nullable=False,
+        server_default=ActionStatus.pending.value,
+    )
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    channel_id: Mapped[str] = mapped_column(String, nullable=False)
+    message_ts: Mapped[str] = mapped_column(String, nullable=False)
+    thread_ts: Mapped[str | None] = mapped_column(String, nullable=True)
+    parent_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("pending_actions.id"),
+        nullable=True,
+    )
+    triggered_by: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    timeout_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
