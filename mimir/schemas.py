@@ -40,7 +40,6 @@ class ConversationDetail(BaseModel):
 
 class PendingActionResponse(BaseModel):
     id: UUID
-    action_type: str
     status: str
     payload: dict
     channel_id: str
@@ -56,7 +55,6 @@ class PendingActionResponse(BaseModel):
 
 
 class PendingActionCreate(BaseModel):
-    action_type: str
     payload: dict
     channel_id: str
     message_ts: str

@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock
 
 
-from mimir.models import ActionType
 from mimir.interfaces.slack.approval import (
     _base_emoji,
     format_approval_message,
@@ -35,22 +34,10 @@ def test_base_emoji_multiple_colons():
 
 
 def test_format_approval_message_tool_call():
-    msg = format_approval_message(
-        ActionType.tool_call, {"description": "restart the pod"}
-    )
+    msg = format_approval_message({"description": "restart the pod"})
     assert "restart the pod" in msg
     assert "✅" in msg
     assert "❌" in msg
-
-
-def test_format_approval_message_memory_write():
-    msg = format_approval_message(
-        ActionType.memory_write,
-        {"description": "update memory", "content": "User likes tea"},
-    )
-    assert "memory.md" in msg
-    assert "User likes tea" in msg
-    assert "✅" in msg
 
 
 # ---------------------------------------------------------------------------

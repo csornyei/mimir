@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile.migrations
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
     profiles:
       - migrate
     restart: "no"
@@ -37,6 +39,25 @@ services:
       ENV: production
     depends_on:
       - mimir-api
+    restart: unless-stopped
+
+  mimir-mcp:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mcp
+    command: uv run python -m mimir.mcp.server
+    ports:
+      - "8001:8000"
+    env_file: .env
+    environment:
+      ENV: production
+      KUBECONFIG: /kubeconfig
+      SEARXNG_URL: https://searxng.tail30e7da.ts.net
+      SEMANTIC_MEMORY_PATH: /vault/memory.md
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
+    volumes:
+      - ${KUBECONFIG:-~/.kube/config}:/kubeconfig:ro
+      - ./scratch/memory.md:/vault/memory.md
     restart: unless-stopped
 
   postgres:

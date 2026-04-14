@@ -1,7 +1,6 @@
 from typing import Any
 
 from mimir.agent.approval import manager
-from mimir.models import ActionType
 from mimir.db import get_session
 from mimir.interfaces.slack.utils import get_bot_user_id
 from mimir.logger import logger
@@ -12,25 +11,12 @@ def _base_emoji(reaction: str) -> str:
     return reaction.split("::")[0]
 
 
-def format_approval_message(action_type: ActionType, payload: dict) -> str:
+def format_approval_message(payload: dict) -> str:
     description = payload.get("description", "perform an action")
-    match action_type:
-        case ActionType.tool_call:
-            return (
-                f"I want to {description}.\n\n"
-                "✅ to go ahead · ❌ to cancel · or reply here to discuss"
-            )
-        case ActionType.memory_write:
-            content = payload.get("content", "")
-            return (
-                f"I'd like to update `memory.md`:\n\n> {content}\n\n"
-                "✅ to go ahead · ❌ to cancel · or reply here to discuss"
-            )
-        case _:
-            return (
-                f"I'd like to {description}.\n\n"
-                "✅ to go ahead · ❌ to cancel · or reply here to discuss"
-            )
+    return (
+        f"I'd like to {description}.\n\n"
+        "✅ to go ahead · ❌ to cancel · or reply here to discuss"
+    )
 
 
 async def on_reaction_added(event: dict, client: Any) -> None:

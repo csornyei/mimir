@@ -127,11 +127,7 @@ class ActionStatus(str, enum.Enum):
     rejected = "rejected"
     discussing = "discussing"
     completed = "completed"
-
-
-class ActionType(str, enum.Enum):
-    tool_call = "tool_call"
-    memory_write = "memory_write"
+    failed = "failed"
 
 
 class PendingActionModel(Base):
@@ -141,10 +137,6 @@ class PendingActionModel(Base):
         PG_UUID(as_uuid=True),
         primary_key=True,
         server_default=func.gen_random_uuid(),
-    )
-    action_type: Mapped[ActionType] = mapped_column(
-        Enum(ActionType, name="action_type", create_type=True),
-        nullable=False,
     )
     status: Mapped[ActionStatus] = mapped_column(
         Enum(ActionStatus, name="action_status", create_type=True),
