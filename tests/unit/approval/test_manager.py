@@ -5,16 +5,14 @@ from uuid import uuid4
 
 import pytest
 
-from mimir.models import ActionStatus, ActionType, PendingActionModel
+from mimir.models import ActionStatus, PendingActionModel
 
 
 def _make_action(
     status: ActionStatus = ActionStatus.pending,
-    action_type: ActionType = ActionType.memory_write,
 ) -> MagicMock:
     action = MagicMock(spec=PendingActionModel)
     action.id = uuid4()
-    action.action_type = action_type
     action.status = status
     action.channel_id = "C123"
     action.message_ts = "111.222"
@@ -66,7 +64,6 @@ async def test_request_approval_creates_db_record_and_posts_to_slack(
 
     result = await manager.request_approval(
         session,
-        action_type=ActionType.memory_write,
         payload={"description": "do stuff", "content": "x", "operation": "append"},
         triggered_by="user:U123",
     )
@@ -92,7 +89,6 @@ async def test_request_approval_does_not_create_record_if_slack_fails(
     with pytest.raises(RuntimeError):
         await manager.request_approval(
             session,
-            action_type=ActionType.memory_write,
             payload={"description": "do stuff", "content": "x", "operation": "append"},
             triggered_by="user:U123",
         )

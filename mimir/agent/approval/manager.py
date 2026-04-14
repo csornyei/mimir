@@ -6,7 +6,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.agent.approval import executor, store
-from mimir.models import ActionStatus, ActionType, PendingActionModel
+from mimir.models import ActionStatus, PendingActionModel
 from mimir.agent import client as agent_client
 from mimir.config import config
 from mimir.logger import logger
@@ -18,7 +18,6 @@ _slack = AsyncWebClient(token=config.slack_bot_token)
 async def request_approval(
     session: AsyncSession,
     *,
-    action_type: ActionType,
     payload: dict,
     triggered_by: str,
     parent_id: UUID | None = None,
@@ -29,7 +28,7 @@ async def request_approval(
     """
     from mimir.interfaces.slack.approval import format_approval_message
 
-    text = format_approval_message(action_type, payload)
+    text = format_approval_message(payload)
 
     slack_response = await _slack.chat_postMessage(
         channel=config.slack_dm_channel_id,
@@ -45,7 +44,6 @@ async def request_approval(
 
     action = await store.create(
         session,
-        action_type=action_type,
         payload=payload,
         channel_id=config.slack_dm_channel_id,
         message_ts=message_ts,
@@ -57,7 +55,6 @@ async def request_approval(
     logger.info(
         "approval_requested",
         action_id=str(action.id),
-        action_type=action_type,
         message_ts=message_ts,
     )
     return action

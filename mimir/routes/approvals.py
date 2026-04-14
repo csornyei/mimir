@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.agent.approval import store
-from mimir.models import ActionStatus, ActionType
+from mimir.models import ActionStatus
 from mimir.db import get_db
 from mimir.schemas import PendingActionCreate, PendingActionPatch, PendingActionResponse
 
@@ -40,16 +40,8 @@ async def create_approval(
     body: PendingActionCreate,
     session: AsyncSession = Depends(get_db),
 ) -> PendingActionResponse:
-    try:
-        action_type = ActionType(body.action_type)
-    except ValueError:
-        raise HTTPException(
-            status_code=422, detail=f"Unknown action_type: {body.action_type!r}"
-        )
-
     action = await store.create(
         session,
-        action_type=action_type,
         payload=body.payload,
         channel_id=body.channel_id,
         message_ts=body.message_ts,

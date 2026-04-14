@@ -4,14 +4,13 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mimir.models import ActionStatus, ActionType, PendingActionModel
+from mimir.models import ActionStatus, PendingActionModel
 from mimir.config import config
 
 
 async def create(
     session: AsyncSession,
     *,
-    action_type: ActionType,
     payload: dict,
     channel_id: str,
     message_ts: str,
@@ -20,7 +19,6 @@ async def create(
     parent_id: UUID | None = None,
 ) -> PendingActionModel:
     action = PendingActionModel(
-        action_type=action_type,
         status=ActionStatus.pending,
         payload=payload,
         channel_id=channel_id,
