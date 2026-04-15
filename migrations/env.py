@@ -8,6 +8,7 @@ from alembic import context
 
 from mimir.base import Base
 from mimir.config import config as app_config
+from mimir import models  # noqa: F401 - registers all models with Base.metadata
 
 alembic_config = context.config
 
