@@ -4,7 +4,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 
-from mimir.db import engine
+from mimir.config import config
+from mimir.db import initialize_db, dispose_db
 from mimir.llm.client import llm_client
 from mimir.memory.semantic import SemanticMemory
 from mimir.rag.watcher import AsyncFileWatcher
@@ -17,6 +18,7 @@ from mimir.scheduler.jobs import consolidate_idle_threads, process_approval_time
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    initialize_db(config.database_url)
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         consolidate_idle_threads,
@@ -37,7 +39,7 @@ async def lifespan(app: FastAPI):
     yield
     scheduler.shutdown()
     await watcher.stop()
-    await engine.dispose()
+    await dispose_db()
     await llm_client.close()
 
 

@@ -1,3 +1,4 @@
+from mimir.agent.tools import tool_dispatcher
 from mimir.models import PendingActionModel
 from mimir.logger import logger
 
@@ -17,8 +18,7 @@ async def execute(action: PendingActionModel) -> str:
 
 
 async def _execute_tool_call(payload: dict) -> str:
-    """Stub — wire to MCP dispatcher when tools are implemented."""
     tool_name = payload.get("tool_name", "unknown")
     args = payload.get("arguments", {})
-    logger.warning("tool_call_stub_executed", tool_name=tool_name, args=args)
-    return f"[stub] `{tool_name}` would have been called with: {args}"
+    result = await tool_dispatcher.dispatch(tool_name, args)
+    return str(result)

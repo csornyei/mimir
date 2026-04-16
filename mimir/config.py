@@ -48,5 +48,11 @@ class MimirConfig(BaseSettings):
     episodic_max_tokens: int = 600
     semantic_memory_max_tokens: int = 1500
 
+    # Tool calling
+    mcp_url: str = "http://localhost:8010"
+    mcp_schema_cache_ttl_seconds: int = 300
+    tool_max_steps: int = 5
+    tool_call_timeout_seconds: int = 30
+
 
 config = MimirConfig()

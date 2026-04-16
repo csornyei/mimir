@@ -25,6 +25,7 @@ agent = [
     "pyaml>=26.2.1",
     "pymupdf>=1.27.2.2",
     "sentence-transformers>=5.3.0",
+    "slack-bolt>=1.27.0",
     "watchdog>=6.0.0",
 ]
 

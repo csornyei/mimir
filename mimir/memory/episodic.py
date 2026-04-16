@@ -89,12 +89,11 @@ class EpisodicMemory:
                 f"{transcript}"
             )
 
-        summary = (
-            await llm_client.complete(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=200,
-            )
-        ).strip()
+        result = await llm_client.complete(
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+        )
+        summary = result["content"].strip()
 
         embedding = await llm_client.embed(summary)
 
