@@ -3,22 +3,20 @@ import inspect
 from datetime import UTC, datetime
 from uuid import UUID
 
+from mcp.types import ToolAnnotations
 from sqlalchemy import select
 
 from mimir.db import get_session
 from mimir.logger import logger
 from mimir.models import ActionStatus, PendingActionModel
+from mimir.mcp.app import mcp
 
 
-def require_approval(func):
-    """Gate an MCP tool on an approved PendingActionModel.
+def write_tool(func):
+    """Register an MCP tool that requires user approval before execution.
 
-    Injects an `action_id: str` parameter into the tool's signature.
-    On call:
-      - Fetches the row with SELECT FOR UPDATE; returns an error dict if not found
-        or not in 'approved' status.
-      - Executes the wrapped function.
-      - Sets the action status to 'completed' on success, 'failed' on exception.
+    Replaces @mcp.tool() + @require_approval. Sets destructiveHint=True so the
+    agent can detect write tools from the schema without any config.
     """
     sig = inspect.signature(func)
     action_id_param = inspect.Parameter(
@@ -31,18 +29,28 @@ def require_approval(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
         if "action_id" not in kwargs:
-            logger.error("require_approval: missing action_id in kwargs")
+            logger.error("write_tool: missing action_id in kwargs")
             return {"error": "Missing required parameter: action_id"}
 
         action_id = kwargs.pop("action_id")
+        logger.debug(
+            "write_tool_called",
+            tool_name=func.__name__,
+            args=args,
+            kwargs=kwargs,
+            action_id=action_id,
+        )
 
         try:
             action_uuid = UUID(action_id)
         except ValueError:
-            logger.error("require_approval: invalid action_id", action_id=action_id)
+            logger.error("write_tool: invalid action_id", action_id=action_id)
             return {"error": f"Invalid action_id format: {action_id}"}
 
         async with get_session() as session:
+            logger.debug(
+                "write_tool: querying for approved action", action_id=action_id
+            )
             result = await session.scalars(
                 select(PendingActionModel)
                 .where(
@@ -53,22 +61,28 @@ def require_approval(func):
             )
             action = result.first()
 
+            logger.debug(
+                "write_tool: action query result",
+                action_id=action_id,
+                action_found=action is not None,
+            )
+
             if action is None:
                 logger.warning(
-                    "require_approval: no approved action found",
+                    "write_tool: no approved action found",
                     action_id=action_id,
                 )
                 return {"error": f"No approved action found with id {action_id}."}
 
             try:
                 tool_result = await func(*args, **kwargs)
-                action.status = ActionStatus.completed
-                action.resolved_at = datetime.now(UTC)
+                logger.debug(
+                    "write_tool: tool execution succeeded",
+                    action_id=action_id,
+                )
             except Exception as e:
-                action.status = ActionStatus.failed
-                action.resolved_at = datetime.now(UTC)
                 logger.error(
-                    "require_approval: tool execution failed",
+                    "write_tool: tool execution failed",
                     action_id=action_id,
                     error=str(e),
                 )
@@ -79,4 +93,4 @@ def require_approval(func):
         return tool_result
 
     wrapper.__signature__ = new_sig  # ty: ignore
-    return wrapper
+    return mcp.tool(annotations=ToolAnnotations(destructiveHint=True))(wrapper)

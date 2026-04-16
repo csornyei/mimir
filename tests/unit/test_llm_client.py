@@ -55,7 +55,9 @@ async def test_complete_returns_content(mocker):
 
     result = await client.complete([{"role": "user", "content": "Hi"}])
 
-    assert result == "Hello there!"
+    assert result["content"] == "Hello there!"
+    assert result["finish_reason"] == "stop"
+    assert result["tool_calls"] == []
 
 
 async def test_complete_posts_to_correct_endpoint(mocker):
@@ -169,7 +171,8 @@ async def test_complete_uses_fallback_on_413(mocker):
         fallbacks=[fallback_msgs],
     )
 
-    assert result == "fallback response"
+    assert result["content"] == "fallback response"
+    assert result["finish_reason"] == "stop"
     assert http.post.call_count == 2
 
 
@@ -192,7 +195,8 @@ async def test_complete_uses_second_fallback_when_first_also_413(mocker):
         ],
     )
 
-    assert result == "minimal response"
+    assert result["content"] == "minimal response"
+    assert result["finish_reason"] == "stop"
     assert http.post.call_count == 3
 
 

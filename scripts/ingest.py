@@ -10,7 +10,8 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from mimir.db import async_session_factory
+from mimir.db import get_session, initialize_db, dispose_db
+from mimir.config import config
 from mimir.logger import logger
 from mimir.rag.ingest import ingest_file
 
@@ -36,7 +37,7 @@ async def run(root: Path, type_filter: str | None) -> None:
     logger.info("Starting bulk ingestion", total_files=len(files), path=str(root))
 
     total_chunks = 0
-    async with async_session_factory() as session:
+    async with get_session() as session:
         for file in files:
             try:
                 n = await ingest_file(file, session)
@@ -72,4 +73,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    initialize_db(config.database_url)
     main()
+    dispose_db()

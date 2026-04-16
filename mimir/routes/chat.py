@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from mimir.agent.tool_schema import tool_schema_registry
+from mimir.agent.tools import tool_dispatcher
 from mimir.db import get_db
 from mimir.logger import logger
 from mimir.config import config
@@ -51,7 +53,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                     reason="rag_budget_exceeded",
                 )
                 continue
-            logger.info(
+            logger.debug(
                 f"Retrieved chunk with score {metadata.get('score'):.4f}", **metadata
             )
             source = metadata.get("file_name", "")
@@ -63,7 +65,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
         rag_context = "\n\n---\n\n".join(context_sections)
     except Exception as e:
-        logger.error(f"Error during retrieval: {e}")
+        logger.error("rag_retrieval_failed", error=str(e))
         rag_context = "Error while retrieving relevant information."
 
     # --- Episodic memory retrieval ---
@@ -73,10 +75,23 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             request.message, k=config.episodic_retrieval_k
         )
         episodic_context = format_episodic_context(episodic_memories)
-        logger.info("episodic_retrieval", count=len(episodic_memories))
+        logger.debug("episodic_retrieval", count=len(episodic_memories))
     except Exception as e:
-        logger.error(f"Error during episodic retrieval: {e}")
+        logger.error("episodic_retrieval_failed", error=str(e))
         episodic_context = ""
+
+    # --- Fetch tool schemas ---
+    tools: list[dict] = []
+    try:
+        tools = await tool_schema_registry.get_tools()
+        logger.debug("fetched_tools", count=len(tools))
+    except Exception as e:
+        logger.warning(
+            "failed_to_fetch_tools",
+            error=str(e),
+            fallback="proceeding_without_tools",
+        )
+        tools = []
 
     # --- Assemble system prompt (trims semantic memory + episodic internally) ---
     system_prompt = build_system_prompt(
@@ -85,6 +100,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         episodic_context=episodic_context,
         rag_context=rag_context,
         context_window=config.llm_context_window,
+        tools=tools,
     )
 
     # --- Dynamic conversation window ---
@@ -100,18 +116,18 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     )
     messages = [{"role": "system", "content": system_prompt}] + conversation_messages
 
-    logger.info(f"Conversation history:\n{messages}")
-
     # --- Pre-build fallback message lists for the 413 safety net ---
     system_prompt_reduced = build_system_prompt(
         owner=config.owner_name,
         semantic_memory=memory_content,
         context_window=config.llm_context_window,
+        tools=tools,
     )
     system_prompt_minimal = build_system_prompt(
         owner=config.owner_name,
         semantic_memory="",
         context_window=config.llm_context_window,
+        tools=tools,
     )
     messages_reduced = [
         {"role": "system", "content": system_prompt_reduced}
@@ -120,15 +136,26 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         {"role": "system", "content": system_prompt_minimal}
     ] + conversation_messages[-config.conversation_window_min :]
 
-    result = await llm_client.complete(
-        messages=messages,
-        fallbacks=[messages_reduced, messages_minimal],
-    )
-
-    logger.info(f"LLM response: {result}")
+    # --- Get final response (with or without tool loop) ---
+    if tools:
+        final_response = await tool_dispatcher.run_tool_loop(
+            messages=messages,
+            tools=tools,
+            max_steps=config.tool_max_steps,
+            triggered_by=f"user:{request.user_id}",
+        )
+    else:
+        response = await llm_client.complete(
+            messages=messages,
+            tools=None,
+            fallbacks=[messages_reduced, messages_minimal],
+        )
+        final_response = response["content"]
 
     await conversation_manager.add_message(
-        db, request.conversation_id, "assistant", result
+        db, request.conversation_id, "assistant", final_response
     )
 
-    return ChatResponse(response=result, conversation_id=request.conversation_id)
+    return ChatResponse(
+        response=final_response, conversation_id=request.conversation_id
+    )

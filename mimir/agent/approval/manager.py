@@ -74,7 +74,7 @@ async def handle_reaction(
 
     terminal = {ActionStatus.completed, ActionStatus.rejected}
     if action.status in terminal:
-        logger.info(
+        logger.debug(
             "approval_reaction_ignored_terminal",
             action_id=str(action.id),
             status=action.status,
@@ -87,16 +87,24 @@ async def handle_reaction(
     elif emoji in REJECT_EMOJI_NAMES:
         await _handle_reject(session, action)
     else:
-        logger.info("approval_unknown_emoji", emoji=emoji, action_id=str(action.id))
+        logger.debug("approval_unknown_emoji", emoji=emoji, action_id=str(action.id))
 
 
 async def _handle_approve(
     session: AsyncSession, action: PendingActionModel, user_id: str
 ) -> None:
     await store.set_status(session, action.id, ActionStatus.approved)
+    await session.commit()
 
     try:
+        logger.debug(
+            "approval_execution_started",
+            action_id=str(action.id),
+        )
         result = await executor.execute(action)
+        if isinstance(result, dict) and "error" in result:
+            raise Exception(result["error"])
+        logger.info("approval_execution_succeeded", action_id=str(action.id))
         await store.set_status(
             session, action.id, ActionStatus.completed, resolved_at=datetime.now(UTC)
         )
@@ -105,7 +113,6 @@ async def _handle_approve(
             thread_ts=action.message_ts,
             text=f"✅ Done. {result}",
         )
-        logger.info("approval_executed", action_id=str(action.id))
     except Exception as e:
         await store.set_status(
             session, action.id, ActionStatus.rejected, resolved_at=datetime.now(UTC)
@@ -218,4 +225,4 @@ async def process_timeouts(session: AsyncSession) -> None:
                 error=str(e),
             )
     if actions:
-        logger.info("approval_timeouts_processed", count=len(actions))
+        logger.debug("approval_timeouts_processed", count=len(actions))

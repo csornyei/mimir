@@ -90,6 +90,16 @@ class EpisodicMemoryModel(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    __table_args__ = (
+        Index(
+            "ix_episodic_memories_embedding",
+            "embedding",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_using="hnsw",
+            postgresql_with={"m": "16", "ef_construction": "64"},
+        ),
+    )
+
 
 # ---------------------------------------------------------------------------
 # RAG / document chunk model
@@ -118,6 +128,13 @@ class DocumentChunk(Base):
     __table_args__ = (
         Index("ix_document_chunks_source_path", "source_path"),
         Index("ix_document_chunks_source_type", "source_type"),
+        Index(
+            "ix_document_chunks_embedding",
+            "embedding",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_using="hnsw",
+            postgresql_with={"m": "16", "ef_construction": "64"},
+        ),
     )
 
 

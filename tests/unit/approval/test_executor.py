@@ -1,6 +1,6 @@
 """Tests for mimir.agent.approval.executor."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -17,54 +17,29 @@ def _make_action(payload: dict) -> PendingActionModel:
     return action
 
 
-async def test_execute_memory_write_append(tmp_path):
-    action = _make_action(
-        {"operation": "append", "content": "User loves cats"},
-    )
-    # SemanticMemory is imported lazily inside _execute_memory_write
-    with patch("mimir.memory.semantic.SemanticMemory") as MockSM:
-        instance = MockSM.return_value
+async def test_execute_tool_call_dispatches_with_action_id():
+    """executor.execute() must inject action_id into the dispatch args."""
+    action = _make_action({"tool_name": "restart_pod", "arguments": {"pod": "api"}})
+    dispatch_mock = AsyncMock(return_value={"result": "pod restarted", "isError": False})
+
+    with patch(
+        "mimir.agent.approval.executor.tool_dispatcher.dispatch",
+        new=dispatch_mock,
+    ):
         result = await execute(action)
 
-    instance.append_fact.assert_called_once_with("User loves cats")
-    assert "memory.md" in result
-
-
-async def test_execute_memory_write_overwrite_raises():
-    action = _make_action(
-        {"operation": "overwrite", "content": "something"},
+    dispatch_mock.assert_awaited_once_with(
+        "restart_pod",
+        {"pod": "api", "action_id": str(action.id)},
     )
-    with patch("mimir.memory.semantic.SemanticMemory"):
-        with pytest.raises(NotImplementedError):
-            await execute(action)
-
-
-async def test_execute_memory_write_unknown_operation_raises():
-    action = _make_action(
-        {"operation": "delete", "content": "something"},
-    )
-    with patch("mimir.memory.semantic.SemanticMemory"):
-        with pytest.raises(ValueError, match="Unknown memory_write operation"):
-            await execute(action)
-
-
-async def test_execute_tool_call_stub_returns_string():
-    action = _make_action(
-        {"tool_name": "restart_pod", "arguments": {"pod": "api"}},
-    )
-    result = await execute(action)
     assert isinstance(result, str)
-    assert "restart_pod" in result
 
 
 async def test_execute_propagates_exception():
-    action = _make_action(
-        {"operation": "append", "content": "x"},
-    )
-    # Patch the lazy import target so the exception propagates through execute()
+    action = _make_action({"tool_name": "bad_tool", "arguments": {}})
     with patch(
-        "mimir.memory.semantic.SemanticMemory",
-        side_effect=RuntimeError("boom"),
+        "mimir.agent.approval.executor.tool_dispatcher.dispatch",
+        new=AsyncMock(side_effect=RuntimeError("boom")),
     ):
         with pytest.raises(RuntimeError, match="boom"):
             await execute(action)

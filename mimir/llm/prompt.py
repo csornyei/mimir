@@ -30,6 +30,8 @@ If the context doesn't contain the answer, say "I don't see this in your notes."
 - For any action that modifies state (write, delete, deploy), you MUST present it for approval first.
 - You have a context window of {context_window} tokens. Be concise when the situation allows.
 
+{tool_instructions}
+
 ## Memory
 You will periodically summarise conversations. Do not surface this process to the user unless asked.
 
@@ -71,12 +73,48 @@ def format_episodic_context(memories: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def build_tool_instructions(tools: list[dict] | None = None) -> str:
+    """Build tool use instructions based on available tools.
+
+    Args:
+        tools: List of OpenAI-format tool schemas, or None if no tools available
+
+    Returns:
+        Formatted tool instruction block for system prompt
+    """
+    if not tools:
+        return """## Tool Capabilities
+
+You currently have no tools available for this conversation. Answer based on your knowledge and memory only.
+Do not make up tool results. If you don't have the data, say so."""
+
+    tool_names = []
+    for tool in tools:
+        # OpenAI format: tool.function.name
+        if "function" in tool:
+            tool_names.append(tool["function"]["name"])
+        elif "name" in tool:
+            tool_names.append(tool["name"])
+
+    tools_list = ", ".join(sorted(tool_names))
+
+    return f"""## Tool Capabilities
+
+You have access to the following tools: {tools_list}
+
+- Always call the most relevant tool before answering questions.
+- If a tool returns an error, acknowledge it clearly and try an alternative approach.
+- Do not make up tool results. If you don't have the data, say so.
+- Call all necessary tools before giving your final answer."""
+
+
 def build_system_prompt(
     owner: str,
     semantic_memory: str,
     episodic_context: str = "",
     rag_context: str = "",
     context_window: int = 128_000,
+    tools: list[dict] | None = None,
 ) -> str:
     sem_mem = trim_to_tokens(
         semantic_memory or "No semantic memory loaded yet.",
@@ -86,6 +124,8 @@ def build_system_prompt(
         episodic_context or "No relevant past conversations found.",
         config.episodic_max_tokens,
     )
+    tool_instructions = build_tool_instructions(tools)
+
     return SYSTEM_TEMPLATE.format(
         owner=owner,
         datetime=datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -93,4 +133,5 @@ def build_system_prompt(
         episodic_context=ep_ctx,
         rag_context=rag_context or "No relevant documents retrieved.",
         context_window=context_window,
+        tool_instructions=tool_instructions,
     )

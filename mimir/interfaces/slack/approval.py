@@ -20,7 +20,7 @@ def format_approval_message(payload: dict) -> str:
 
 
 async def on_reaction_added(event: dict, client: Any) -> None:
-    logger.info(
+    logger.debug(
         "reaction_added_event",
         reaction=event.get("reaction"),
         user=event.get("user"),

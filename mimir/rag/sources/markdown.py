@@ -3,6 +3,8 @@ import html
 import yaml
 from pathlib import Path
 
+from mimir.logger import logger
+
 
 _HEADER_RE = re.compile(r"^(#{2,3})\s+(.+)$", re.MULTILINE)
 
@@ -45,7 +47,8 @@ def _extract_frontmatter(text: str) -> tuple[dict, str]:
     frontmatter_str = match.group(1)
     try:
         frontmatter = yaml.safe_load(frontmatter_str) or {}
-    except yaml.YAMLError:
+    except yaml.YAMLError as e:
+        logger.warning("markdown_frontmatter_parse_failed", error=str(e))
         frontmatter = {}
 
     text_without_frontmatter = text[match.end() :].strip()

@@ -1,4 +1,3 @@
-from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,14 +26,6 @@ class MimirConfig(BaseSettings):
     approval_discuss_timeout_hours: int = 24  # 0 = no timeout for DISCUSSING state
     slack_dm_channel_id: str = ""
     approval_reinvoke_llm: bool = True  # re-invoke LLM with tool result after approval
-    write_tools: list[str] = Field(default_factory=list)
-
-    @field_validator("write_tools", mode="before")
-    @classmethod
-    def _parse_write_tools(cls, v: object) -> object:
-        if isinstance(v, str):
-            return [t.strip() for t in v.split(",") if t.strip()]
-        return v
 
     episodic_idle_minutes: int = 30
     episodic_retrieval_k: int = 3
@@ -47,6 +38,12 @@ class MimirConfig(BaseSettings):
     rag_max_tokens: int = 2000
     episodic_max_tokens: int = 600
     semantic_memory_max_tokens: int = 1500
+
+    # Tool calling
+    mcp_url: str = "http://localhost:8010"
+    mcp_schema_cache_ttl_seconds: int = 300
+    tool_max_steps: int = 5
+    tool_call_timeout_seconds: int = 30
 
 
 config = MimirConfig()
