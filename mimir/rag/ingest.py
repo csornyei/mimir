@@ -54,7 +54,7 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
     )
     row = existing.scalar_one_or_none()
     if row == content_hash:
-        logger.info("File unchanged, skipping ingestion", path=source_path)
+        logger.debug("File unchanged, skipping ingestion", path=source_path)
         return 0
 
     # Remove stale chunks before re-ingesting
@@ -62,7 +62,7 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
         await session.execute(
             delete(DocumentChunk).where(DocumentChunk.source_path == source_path)
         )
-        logger.info("Deleted stale chunks", path=source_path)
+        logger.debug("Deleted stale chunks", path=source_path)
 
     # Chunk the file
     if suffix == ".md":

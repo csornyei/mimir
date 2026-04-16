@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from mimir.config import config
 from mimir.db import initialize_db, dispose_db
+from mimir.logger import logger
 from mimir.llm.client import llm_client
 from mimir.memory.semantic import SemanticMemory
 from mimir.rag.watcher import AsyncFileWatcher
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
     scheduler.start()
+    logger.info("agent_api_started")
 
     watcher = AsyncFileWatcher()
     await watcher.start()
@@ -41,6 +43,7 @@ async def lifespan(app: FastAPI):
     await watcher.stop()
     await dispose_db()
     await llm_client.close()
+    logger.info("agent_api_stopped")
 
 
 app = FastAPI(lifespan=lifespan)

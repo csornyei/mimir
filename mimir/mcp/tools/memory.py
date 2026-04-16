@@ -14,5 +14,5 @@ async def append_to_semantic_memory(text: str) -> dict[str, str]:
     with open(mcp_config.semantic_memory_path, "a", encoding="utf-8") as f:
         f.write(entry)
 
-    logger.info("append_to_semantic_memory: appended to memory")
+    logger.debug("append_to_semantic_memory: appended to memory")
     return {"message": "Successfully appended to semantic memory."}

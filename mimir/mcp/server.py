@@ -15,4 +15,4 @@ if __name__ == "__main__":
         logger.info("MCP server stopped by user.")
         exit(0)
     except Exception as e:
-        logger.error(f"Error running MCP server: {e}")
+        logger.error("mcp_server_error", error=str(e))

@@ -44,7 +44,7 @@ class ToolSchemaRegistry:
         if not refresh and self._schemas is not None and self._cache_time is not None:
             age = (now - self._cache_time).total_seconds()
             if age < config.mcp_schema_cache_ttl_seconds:
-                logger.info("tool_schemas_cached", age_seconds=int(age))
+                logger.debug("tool_schemas_cached", age_seconds=int(age))
                 return self._schemas
 
         # Fetch with lock to avoid concurrent requests

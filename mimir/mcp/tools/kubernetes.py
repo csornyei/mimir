@@ -11,7 +11,7 @@ from mimir.mcp.decorators import write_tool
 @mcp.tool()
 async def list_pods(namespace: str = "default") -> list[dict[str, Any]]:
     """List all pods in a namespace."""
-    logger.info("list_pods", namespace=namespace)
+    logger.debug("list_pods", namespace=namespace)
     return [
         {
             "name": pod.name,
@@ -30,7 +30,7 @@ async def list_pods(namespace: str = "default") -> list[dict[str, Any]]:
 @mcp.tool()
 async def list_deployments(namespace: str = "default") -> list[dict[str, Any]]:
     """List all deployments in a namespace."""
-    logger.info("list_deployments", namespace=namespace)
+    logger.debug("list_deployments", namespace=namespace)
     return [
         {
             "name": d.name,
@@ -46,7 +46,7 @@ async def list_deployments(namespace: str = "default") -> list[dict[str, Any]]:
 @mcp.tool()
 async def list_services(namespace: str = "default") -> list[dict[str, Any]]:
     """List all services in a namespace."""
-    logger.info("list_services", namespace=namespace)
+    logger.debug("list_services", namespace=namespace)
     return [
         {
             "name": svc.name,
@@ -69,7 +69,7 @@ async def list_services(namespace: str = "default") -> list[dict[str, Any]]:
 @mcp.tool()
 async def list_namespaces() -> list[dict[str, Any]]:
     """List all namespaces in the cluster."""
-    logger.info("list_namespaces")
+    logger.debug("list_namespaces")
     return [
         {
             "name": ns.name,
@@ -87,7 +87,7 @@ async def get_pod_logs(
     tail_lines: int = 100,
 ) -> str:
     """Get logs from a pod. Returns the last tail_lines lines."""
-    logger.info(
+    logger.debug(
         "get_pod_logs",
         name=name,
         namespace=namespace,
@@ -137,7 +137,7 @@ async def describe_resource(
     namespace: str = "default",
 ) -> dict[str, Any]:
     """Describe a Kubernetes resource and return its full spec and status."""
-    logger.info("describe_resource", kind=kind, name=name, namespace=namespace)
+    logger.debug("describe_resource", kind=kind, name=name, namespace=namespace)
     normalized = _RESOURCE_KIND_MAP.get(kind.lower(), kind.lower())
     resources = [
         r async for r in kr8s.asyncio.get(normalized, name, namespace=namespace)
@@ -159,7 +159,7 @@ async def deploy_pod(
     labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Deploy a pod with the given name and image. Returns the created pod's metadata."""
-    logger.info("deploy_pod", name=name, image=image, namespace=namespace)
+    logger.debug("deploy_pod", name=name, image=image, namespace=namespace)
     pod = Pod.gen(name=name, image=image, namespace=namespace, labels=labels or {})
     pod.create()
     return {
@@ -173,7 +173,7 @@ async def deploy_pod(
 @mcp.tool()
 async def list_nodes() -> list[dict[str, Any]]:
     """List all nodes in the cluster."""
-    logger.info("list_nodes")
+    logger.debug("list_nodes")
     return [
         {
             "name": node.name,

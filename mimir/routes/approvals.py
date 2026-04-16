@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from mimir.agent.approval import store
 from mimir.models import ActionStatus
 from mimir.db import get_db
+from mimir.logger import logger
 from mimir.schemas import PendingActionCreate, PendingActionPatch, PendingActionResponse
 
 router = APIRouter()
@@ -61,6 +62,7 @@ async def patch_approval(
     try:
         status = ActionStatus(body.status)
     except ValueError:
+        logger.warning("invalid_action_status_patch", status=body.status, action_id=str(action_id))
         raise HTTPException(status_code=422, detail=f"Unknown status: {body.status!r}")
 
     action = await store.get_by_id(session, action_id)

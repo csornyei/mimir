@@ -10,7 +10,7 @@ from mimir.mcp.config import mcp_config
 @mcp.tool()
 async def web_search(query: str, num_results: int = 10) -> list[dict[str, Any]]:
     """Search the web via SearXNG and return results with title, url, and snippet."""
-    logger.info("web_search", query=query, num_results=num_results)
+    logger.debug("web_search", query=query, num_results=num_results)
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{mcp_config.searxng_url}/search",

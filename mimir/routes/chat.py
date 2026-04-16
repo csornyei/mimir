@@ -53,7 +53,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                     reason="rag_budget_exceeded",
                 )
                 continue
-            logger.info(
+            logger.debug(
                 f"Retrieved chunk with score {metadata.get('score'):.4f}", **metadata
             )
             source = metadata.get("file_name", "")
@@ -65,7 +65,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
         rag_context = "\n\n---\n\n".join(context_sections)
     except Exception as e:
-        logger.error(f"Error during retrieval: {e}")
+        logger.error("rag_retrieval_failed", error=str(e))
         rag_context = "Error while retrieving relevant information."
 
     # --- Episodic memory retrieval ---
@@ -75,16 +75,16 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             request.message, k=config.episodic_retrieval_k
         )
         episodic_context = format_episodic_context(episodic_memories)
-        logger.info("episodic_retrieval", count=len(episodic_memories))
+        logger.debug("episodic_retrieval", count=len(episodic_memories))
     except Exception as e:
-        logger.error(f"Error during episodic retrieval: {e}")
+        logger.error("episodic_retrieval_failed", error=str(e))
         episodic_context = ""
 
     # --- Fetch tool schemas ---
     tools: list[dict] = []
     try:
         tools = await tool_schema_registry.get_tools()
-        logger.info("fetched_tools", count=len(tools))
+        logger.debug("fetched_tools", count=len(tools))
     except Exception as e:
         logger.warning(
             "failed_to_fetch_tools",
@@ -115,8 +115,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         db, request.conversation_id, n
     )
     messages = [{"role": "system", "content": system_prompt}] + conversation_messages
-
-    logger.info(f"Conversation history:\n{messages}")
 
     # --- Pre-build fallback message lists for the 413 safety net ---
     system_prompt_reduced = build_system_prompt(
@@ -153,8 +151,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             fallbacks=[messages_reduced, messages_minimal],
         )
         final_response = response["content"]
-
-    logger.info(f"LLM response: {final_response}")
 
     await conversation_manager.add_message(
         db, request.conversation_id, "assistant", final_response

@@ -56,7 +56,7 @@ async def fetch_tools_openai_format() -> list[dict]:
     async with _mcp_session() as session:
         result = await session.list_tools()
         tools = [_tool_to_openai(t) for t in result.tools]
-        logger.info("fetched_tool_schemas", count=len(tools))
+        logger.debug("fetched_tool_schemas", count=len(tools))
         return tools
 
 

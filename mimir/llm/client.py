@@ -73,15 +73,13 @@ class LLMClient:
                     "temperature": temperature or config.llm_temperature,
                 }
 
-                logger.info("Sending request to LLM", payload=payload)
-
                 if tools:
                     payload["tools"] = tools
                     payload["tool_choice"] = "auto"
 
                 response = await self._client.post("/v1/chat/completions", json=payload)
 
-                logger.info(
+                logger.debug(
                     "Received response from LLM",
                     status_code=response.status_code,
                 )
@@ -89,14 +87,25 @@ class LLMClient:
                 response.raise_for_status()
 
                 result = response.json()
-
-                logger.info("Received response from LLM", result=result)
                 if "choices" not in result or len(result["choices"]) == 0:
                     return {
                         "content": '{"error": "No choices returned from LLM"}',
                         "tool_calls": [],
                         "finish_reason": "stop",
                     }
+
+                usage = result.get("usage") or {}
+                prompt_tokens = usage.get("prompt_tokens") or sum(
+                    len(m.get("content") or "") // 4 for m in msgs
+                )
+                completion_tokens = usage.get("completion_tokens")
+                logger.info(
+                    "llm_tokens",
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=usage.get("total_tokens"),
+                    estimated=not bool(usage),
+                )
 
                 choice = result["choices"][0]
                 message = choice.get("message", {})

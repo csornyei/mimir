@@ -76,7 +76,7 @@ def write_tool(func):
 
             try:
                 tool_result = await func(*args, **kwargs)
-                logger.info(
+                logger.debug(
                     "write_tool: tool execution succeeded",
                     action_id=action_id,
                 )

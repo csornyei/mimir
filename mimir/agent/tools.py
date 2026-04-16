@@ -21,9 +21,9 @@ class ToolDispatcher:
 
     async def dispatch(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
         try:
-            logger.info("dispatching_tool", tool_name=tool_name, args=args)
+            logger.debug("dispatching_tool", tool_name=tool_name, args=args)
             result = await call_tool(tool_name, args)
-            logger.info("tool_executed", tool_name=tool_name, result=result)
+            logger.debug("tool_executed", tool_name=tool_name)
             return result
 
         except asyncio.TimeoutError:
@@ -49,7 +49,7 @@ class ToolDispatcher:
         messages = messages.copy()  # Don't mutate caller's list
 
         for step in range(max_steps):
-            logger.info("tool_loop_step", step=step + 1, max_steps=max_steps)
+            logger.debug("tool_loop_step", step=step + 1, max_steps=max_steps)
 
             response = await llm_client.complete(messages=messages, tools=tools)
 
@@ -63,7 +63,7 @@ class ToolDispatcher:
             messages.append(assistant_msg)
 
             if not tool_calls or finish_reason == "stop":
-                logger.info("tool_loop_final_response", step=step + 1)
+                logger.debug("tool_loop_final_response", step=step + 1)
                 return content
 
             approval_requested = False
@@ -74,7 +74,12 @@ class ToolDispatcher:
 
                 try:
                     args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        "tool_args_json_decode_failed",
+                        tool_name=tool_name,
+                        error=str(e),
+                    )
                     args = {}
 
                 if _is_write_tool(tool_name, tools):
@@ -122,7 +127,7 @@ class ToolDispatcher:
                     payload=payload,
                     triggered_by=triggered_by,
                 )
-            logger.info("write_tool_approval_requested", tool_name=tool_name)
+            logger.debug("write_tool_approval_requested", tool_name=tool_name)
             return {
                 "status": "approval_requested",
                 "message": "Approval request sent. I'll proceed once you confirm in the DMs.",

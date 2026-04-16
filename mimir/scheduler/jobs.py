@@ -59,7 +59,7 @@ async def consolidate_idle_threads() -> None:
     if not all_ids:
         return
 
-    logger.info(
+    logger.debug(
         "consolidation_job_start",
         fresh=len(fresh_ids),
         re_consolidation=len(re_consolidation_ids),
@@ -71,7 +71,7 @@ async def consolidate_idle_threads() -> None:
             try:
                 consolidated = await memory.consolidate(thread_id)
                 if consolidated:
-                    logger.info("consolidated_thread", thread_id=thread_id)
+                    logger.debug("consolidated_thread", thread_id=thread_id)
             except Exception as e:
                 logger.error("consolidation_failed", thread_id=thread_id, error=str(e))
                 await session.execute(

@@ -23,7 +23,7 @@ async def send_to_agent(
             user_id=user_id,
         )
 
-        logger.info(
+        logger.debug(
             "sending_to_agent",
             conversation_id=conversation_id,
             user_id=user_id,
