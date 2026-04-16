@@ -19,7 +19,11 @@ class ToolSchemaRegistry:
             tools = await fetch_tools_openai_format()
             return tools
         except Exception as e:
-            logger.error("failed_to_fetch_tool_schemas", error=str(e), error_type=type(e).__name__)
+            logger.error(
+                "failed_to_fetch_tool_schemas",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
             raise
 
     async def get_tools(self, refresh: bool = False) -> list[dict]:

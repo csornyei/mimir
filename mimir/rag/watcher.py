@@ -11,7 +11,7 @@ from watchdog.events import (
 from watchdog.observers import Observer
 
 from mimir.config import config
-from mimir.db import async_session_factory
+from mimir.db import get_session
 from mimir.logger import logger
 from mimir.rag.ingest import ingest_file
 
@@ -31,7 +31,7 @@ class _VaultEventHandler(FileSystemEventHandler):
 
     async def _ingest(self, path: Path) -> None:
         try:
-            async with async_session_factory() as session:
+            async with get_session() as session:
                 n = await ingest_file(path, session)
                 await session.commit()
             logger.info("Auto-ingestion complete", path=str(path), chunks=n)

@@ -8,7 +8,6 @@ from sqlalchemy import select
 from mimir.db import get_session
 from mimir.logger import logger
 from mimir.models import ActionStatus, PendingActionModel
-from mimir.mcp.config import mcp_config
 
 
 def require_approval(func):
@@ -43,7 +42,7 @@ def require_approval(func):
             logger.error("require_approval: invalid action_id", action_id=action_id)
             return {"error": f"Invalid action_id format: {action_id}"}
 
-        async with get_session(database_url=mcp_config.database_url) as session:
+        async with get_session() as session:
             result = await session.scalars(
                 select(PendingActionModel)
                 .where(

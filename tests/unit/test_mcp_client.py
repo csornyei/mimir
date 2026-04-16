@@ -28,7 +28,10 @@ def test_tool_to_openai_normal():
         "function": {
             "name": "web_search",
             "description": "Search the web",
-            "parameters": {"type": "object", "properties": {"query": {"type": "string"}}},
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+            },
         },
     }
 
@@ -184,7 +187,9 @@ async def test_call_tool_returns_result_dict():
         result = await call_tool("list_pods", {"namespace": "default"})
 
     assert result == {"result": "42 pods running", "isError": False}
-    mock_session.call_tool.assert_awaited_once_with("list_pods", {"namespace": "default"})
+    mock_session.call_tool.assert_awaited_once_with(
+        "list_pods", {"namespace": "default"}
+    )
 
 
 @pytest.mark.asyncio

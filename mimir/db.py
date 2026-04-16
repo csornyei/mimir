@@ -28,7 +28,9 @@ async def dispose_db() -> None:
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency for database sessions. Requires initialize_db() to be called at startup."""
     if _async_session_factory is None:
-        raise RuntimeError("Database not initialized. Call initialize_db(database_url) at app startup.")
+        raise RuntimeError(
+            "Database not initialized. Call initialize_db(database_url) at app startup."
+        )
     async with _async_session_factory() as session:
         try:
             yield session
@@ -43,7 +45,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Context-manager session for use outside FastAPI's dependency injection (e.g. scheduler jobs).
     Requires initialize_db() to be called at startup."""
     if _async_session_factory is None:
-        raise RuntimeError("Database not initialized. Call initialize_db(database_url) at app startup.")
+        raise RuntimeError(
+            "Database not initialized. Call initialize_db(database_url) at app startup."
+        )
     async with _async_session_factory() as session:
         try:
             yield session

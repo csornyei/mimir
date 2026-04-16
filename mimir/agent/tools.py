@@ -19,7 +19,9 @@ class ToolDispatcher:
             return result
 
         except asyncio.TimeoutError:
-            error_msg = f"Tool {tool_name} timed out after {config.tool_call_timeout_seconds}s"
+            error_msg = (
+                f"Tool {tool_name} timed out after {config.tool_call_timeout_seconds}s"
+            )
             logger.error("tool_timeout", tool_name=tool_name)
             return {"error": error_msg}
 
