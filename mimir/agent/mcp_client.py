@@ -21,6 +21,8 @@ async def _mcp_session():
 
 def _tool_to_openai(tool) -> dict:
     """Convert a single MCP Tool object to OpenAI function-calling format."""
+    annotations = tool.annotations
+    destructive = bool(annotations and annotations.destructiveHint)
     return {
         "type": "function",
         "function": {
@@ -28,6 +30,7 @@ def _tool_to_openai(tool) -> dict:
             "description": tool.description or "",
             "parameters": tool.inputSchema,
         },
+        "destructive": destructive,
     }
 
 

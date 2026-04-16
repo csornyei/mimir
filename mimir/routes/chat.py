@@ -144,6 +144,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             messages=messages,
             tools=tools,
             max_steps=config.tool_max_steps,
+            triggered_by=f"user:{request.user_id}",
         )
     else:
         response = await llm_client.complete(

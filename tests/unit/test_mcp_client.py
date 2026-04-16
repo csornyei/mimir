@@ -20,6 +20,7 @@ def test_tool_to_openai_normal():
     tool.name = "web_search"
     tool.description = "Search the web"
     tool.inputSchema = {"type": "object", "properties": {"query": {"type": "string"}}}
+    tool.annotations = None
 
     result = _tool_to_openai(tool)
 
@@ -33,6 +34,7 @@ def test_tool_to_openai_normal():
                 "properties": {"query": {"type": "string"}},
             },
         },
+        "destructive": False,
     }
 
 
@@ -41,11 +43,27 @@ def test_tool_to_openai_null_description():
     tool.name = "list_files"
     tool.description = None
     tool.inputSchema = {"type": "object"}
+    tool.annotations = None
 
     result = _tool_to_openai(tool)
 
     assert result["function"]["description"] == ""
     assert result["function"]["name"] == "list_files"
+    assert result["destructive"] is False
+
+
+def test_tool_to_openai_destructive_hint():
+    tool = MagicMock()
+    tool.name = "deploy_pod"
+    tool.description = "Deploy a pod"
+    tool.inputSchema = {"type": "object"}
+    tool.annotations = MagicMock()
+    tool.annotations.destructiveHint = True
+
+    result = _tool_to_openai(tool)
+
+    assert result["destructive"] is True
+    assert result["function"]["name"] == "deploy_pod"
 
 
 # ---------------------------------------------------------------------------

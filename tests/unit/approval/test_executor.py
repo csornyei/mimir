@@ -17,24 +17,26 @@ def _make_action(payload: dict) -> PendingActionModel:
     return action
 
 
-async def test_execute_tool_call_dispatches_and_returns_string():
-    action = _make_action(
-        {"tool_name": "restart_pod", "arguments": {"pod": "api"}},
-    )
+async def test_execute_tool_call_dispatches_with_action_id():
+    """executor.execute() must inject action_id into the dispatch args."""
+    action = _make_action({"tool_name": "restart_pod", "arguments": {"pod": "api"}})
+    dispatch_mock = AsyncMock(return_value={"result": "pod restarted", "isError": False})
+
     with patch(
         "mimir.agent.approval.executor.tool_dispatcher.dispatch",
-        new=AsyncMock(return_value={"result": "pod restarted", "isError": False}),
+        new=dispatch_mock,
     ):
         result = await execute(action)
 
+    dispatch_mock.assert_awaited_once_with(
+        "restart_pod",
+        {"pod": "api", "action_id": str(action.id)},
+    )
     assert isinstance(result, str)
-    assert "restart_pod" in result or "pod restarted" in result
 
 
 async def test_execute_propagates_exception():
-    action = _make_action(
-        {"tool_name": "bad_tool", "arguments": {}},
-    )
+    action = _make_action({"tool_name": "bad_tool", "arguments": {}})
     with patch(
         "mimir.agent.approval.executor.tool_dispatcher.dispatch",
         new=AsyncMock(side_effect=RuntimeError("boom")),

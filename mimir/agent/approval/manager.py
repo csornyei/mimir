@@ -94,9 +94,17 @@ async def _handle_approve(
     session: AsyncSession, action: PendingActionModel, user_id: str
 ) -> None:
     await store.set_status(session, action.id, ActionStatus.approved)
+    await session.commit()
 
     try:
+        logger.debug(
+            "approval_execution_started",
+            action_id=str(action.id),
+        )
         result = await executor.execute(action)
+        if isinstance(result, dict) and "error" in result:
+            raise Exception(result["error"])
+        logger.info("approval_execution_succeeded", action_id=str(action.id))
         await store.set_status(
             session, action.id, ActionStatus.completed, resolved_at=datetime.now(UTC)
         )

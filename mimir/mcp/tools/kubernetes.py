@@ -5,7 +5,7 @@ from kr8s.objects import Pod
 
 from mimir.logger import logger
 from mimir.mcp.app import mcp
-from mimir.mcp.decorators import require_approval
+from mimir.mcp.decorators import write_tool
 
 
 @mcp.tool()
@@ -151,8 +151,7 @@ async def describe_resource(
     return resource.raw
 
 
-@mcp.tool()
-@require_approval
+@write_tool
 async def deploy_pod(
     name: str,
     image: str,

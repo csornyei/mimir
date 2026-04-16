@@ -8,6 +8,7 @@ from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
 from mimir.interfaces.slack import approval as slack_approval
 from mimir.agent import client as agent_client
+from mimir.db import initialize_db, dispose_db
 from mimir.config import config
 from mimir.interfaces.slack.utils import get_bot_user_id
 from mimir.logger import logger
@@ -228,9 +229,14 @@ async def handle_message(event: dict, say: Any, client: Any) -> None:
 async def start():
     logger.debug("configuring_slack_bot", config=config.model_dump())
     logger.info("Starting Slack bot")
+    initialize_db(config.database_url)
     handler = AsyncSocketModeHandler(app, config.slack_app_token)
     await handler.start_async()
 
 
 if __name__ == "__main__":
-    asyncio.run(start())
+    try:
+        asyncio.run(start())
+    finally:
+        logger.debug("disposing_db")
+        asyncio.run(dispose_db())
