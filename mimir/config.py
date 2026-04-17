@@ -50,5 +50,9 @@ class MimirConfig(BaseSettings):
     caldav_username: str | None = None
     caldav_password: str | None = None
 
+    # Morning briefing
+    morning_brief_channel_id: str | None = None
+    morning_brief_hour: int = 7
+
 
 config = MimirConfig()
