@@ -100,7 +100,8 @@ class ToolDispatcher:
             messages.extend(tool_results)
 
             if approval_requested:
-                return "I've requested your approval. Please check your DMs to confirm."
+                final = await llm_client.complete(messages=messages, tools=tools)
+                return final.get("content", "")
 
         logger.warning("tool_loop_max_steps_exceeded", max_steps=max_steps)
         return (

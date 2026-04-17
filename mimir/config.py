@@ -45,5 +45,10 @@ class MimirConfig(BaseSettings):
     tool_max_steps: int = 5
     tool_call_timeout_seconds: int = 30
 
+    # CalDAV integration
+    caldav_url: str | None = None
+    caldav_username: str | None = None
+    caldav_password: str | None = None
+
 
 config = MimirConfig()
