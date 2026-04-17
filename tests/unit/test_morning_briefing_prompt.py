@@ -53,4 +53,7 @@ def test_build_morning_prompt_no_events_still_returns_two_messages():
 
 def test_build_morning_prompt_no_events_notes_empty_schedule():
     messages = build_morning_prompt([])
-    assert "no events" in messages[1]["content"].lower() or "nothing" in messages[1]["content"].lower()
+    assert (
+        "no events" in messages[1]["content"].lower()
+        or "nothing" in messages[1]["content"].lower()
+    )

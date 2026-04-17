@@ -73,6 +73,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    from asyncio import run as asyncio_run
+
     initialize_db(config.database_url)
     main()
-    dispose_db()
+    asyncio_run(dispose_db())

@@ -68,8 +68,10 @@ async def test_run_digest_skips_when_below_threshold():
     with patch("mimir.scheduler.rss.job.config") as mock_cfg:
         for k, v in _BASE_CONFIG.items():
             setattr(mock_cfg, k, v)
-        with patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss), \
-             patch("mimir.scheduler.rss.job.post_digest_header") as mock_post:
+        with (
+            patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
+            patch("mimir.scheduler.rss.job.post_digest_header") as mock_post,
+        ):
             await run_digest(START, END, "08-12")
 
     mock_post.assert_not_called()
@@ -80,7 +82,14 @@ async def test_run_digest_posts_header_and_picks():
     from mimir.scheduler.rss.job import run_digest
 
     entries = _make_entries(15)
-    picks = [{"id": 0, "title": "Article 0", "url": "https://example.com/0", "reason": "interesting"}]
+    picks = [
+        {
+            "id": 0,
+            "title": "Article 0",
+            "url": "https://example.com/0",
+            "reason": "interesting",
+        }
+    ]
 
     mock_rss = MagicMock()
     mock_rss.get_entries = AsyncMock(return_value=entries)
@@ -91,13 +100,26 @@ async def test_run_digest_posts_header_and_picks():
     with patch("mimir.scheduler.rss.job.config") as mock_cfg:
         for k, v in _BASE_CONFIG.items():
             setattr(mock_cfg, k, v)
-        with patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss), \
-             patch("mimir.scheduler.rss.job.summarise_feedback", new=AsyncMock(return_value="No feedback.")), \
-             patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem, \
-             patch("mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=picks)), \
-             patch("mimir.scheduler.rss.job.post_digest_header", new=AsyncMock(return_value="111.000")), \
-             patch("mimir.scheduler.rss.job.post_pick", new=AsyncMock(return_value="222.000")), \
-             patch("mimir.scheduler.rss.job.get_session") as mock_ctx:
+        with (
+            patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
+            patch(
+                "mimir.scheduler.rss.job.summarise_feedback",
+                new=AsyncMock(return_value="No feedback."),
+            ),
+            patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem,
+            patch(
+                "mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=picks)
+            ),
+            patch(
+                "mimir.scheduler.rss.job.post_digest_header",
+                new=AsyncMock(return_value="111.000"),
+            ),
+            patch(
+                "mimir.scheduler.rss.job.post_pick",
+                new=AsyncMock(return_value="222.000"),
+            ),
+            patch("mimir.scheduler.rss.job.get_session") as mock_ctx,
+        ):
             mock_mem.return_value.read.return_value = ""
             mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -121,11 +143,16 @@ async def test_run_digest_skips_post_when_no_picks():
     with patch("mimir.scheduler.rss.job.config") as mock_cfg:
         for k, v in _BASE_CONFIG.items():
             setattr(mock_cfg, k, v)
-        with patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss), \
-             patch("mimir.scheduler.rss.job.summarise_feedback", new=AsyncMock(return_value="No feedback.")), \
-             patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem, \
-             patch("mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=[])), \
-             patch("mimir.scheduler.rss.job.post_digest_header") as mock_post:
+        with (
+            patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
+            patch(
+                "mimir.scheduler.rss.job.summarise_feedback",
+                new=AsyncMock(return_value="No feedback."),
+            ),
+            patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem,
+            patch("mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=[])),
+            patch("mimir.scheduler.rss.job.post_digest_header") as mock_post,
+        ):
             mock_mem.return_value.read.return_value = ""
             await run_digest(START, END, "08-12")
 

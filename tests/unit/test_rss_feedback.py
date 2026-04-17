@@ -80,7 +80,9 @@ async def test_on_digest_reaction_ignores_non_thumbs():
     from mimir.scheduler.rss.feedback import on_digest_reaction
 
     event = {"reaction": "wave", "item": {"type": "message", "ts": "111.222"}}
-    with patch("mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()) as mock_rec:
+    with patch(
+        "mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()
+    ) as mock_rec:
         await on_digest_reaction(event, None)
     mock_rec.assert_not_called()
 
@@ -90,7 +92,9 @@ async def test_on_digest_reaction_ignores_non_message_items():
     from mimir.scheduler.rss.feedback import on_digest_reaction
 
     event = {"reaction": "+1", "item": {"type": "file", "ts": "111.222"}}
-    with patch("mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()) as mock_rec:
+    with patch(
+        "mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()
+    ) as mock_rec:
         await on_digest_reaction(event, None)
     mock_rec.assert_not_called()
 
@@ -100,7 +104,9 @@ async def test_on_digest_reaction_records_thumbs_up():
     from mimir.scheduler.rss.feedback import on_digest_reaction
 
     event = {"reaction": "+1", "item": {"type": "message", "ts": "111.222"}}
-    with patch("mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()) as mock_rec:
+    with patch(
+        "mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()
+    ) as mock_rec:
         await on_digest_reaction(event, None)
     mock_rec.assert_awaited_once_with("111.222", "+1")
 
@@ -110,7 +116,9 @@ async def test_on_digest_reaction_records_thumbs_down():
     from mimir.scheduler.rss.feedback import on_digest_reaction
 
     event = {"reaction": "-1", "item": {"type": "message", "ts": "111.222"}}
-    with patch("mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()) as mock_rec:
+    with patch(
+        "mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()
+    ) as mock_rec:
         await on_digest_reaction(event, None)
     mock_rec.assert_awaited_once_with("111.222", "-1")
 
@@ -119,7 +127,12 @@ async def test_on_digest_reaction_records_thumbs_down():
 async def test_on_digest_reaction_strips_skin_tone():
     from mimir.scheduler.rss.feedback import on_digest_reaction
 
-    event = {"reaction": "+1::skin-tone-3", "item": {"type": "message", "ts": "111.222"}}
-    with patch("mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()) as mock_rec:
+    event = {
+        "reaction": "+1::skin-tone-3",
+        "item": {"type": "message", "ts": "111.222"},
+    }
+    with patch(
+        "mimir.scheduler.rss.feedback.record_reaction", new=AsyncMock()
+    ) as mock_rec:
         await on_digest_reaction(event, None)
     mock_rec.assert_awaited_once_with("111.222", "+1")

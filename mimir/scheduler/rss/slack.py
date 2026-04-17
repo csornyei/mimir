@@ -12,7 +12,12 @@ async def post_digest_header(channel_id: str, n_scanned: int, n_picks: int) -> s
     text = f"*RSS Digest — {now}*\nScanned {n_scanned} articles · selected {n_picks} for you."
     slack = AsyncWebClient(token=config.slack_bot_token)
     response = await slack.chat_postMessage(channel=channel_id, text=text)
-    logger.info("rss_digest_header_posted", channel_id=channel_id, n_scanned=n_scanned, n_picks=n_picks)
+    logger.info(
+        "rss_digest_header_posted",
+        channel_id=channel_id,
+        n_scanned=n_scanned,
+        n_picks=n_picks,
+    )
     return response["ts"]
 
 
@@ -27,5 +32,10 @@ async def post_pick(channel_id: str, thread_ts: str, pick: dict[str, Any]) -> st
         thread_ts=thread_ts,
         text=text,
     )
-    logger.debug("rss_digest_pick_posted", channel_id=channel_id, thread_ts=thread_ts, title=title)
+    logger.debug(
+        "rss_digest_pick_posted",
+        channel_id=channel_id,
+        thread_ts=thread_ts,
+        title=title,
+    )
     return response["ts"]

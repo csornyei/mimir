@@ -38,7 +38,12 @@ async def test_post_pick_returns_ts():
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "333.444"})
-    pick = {"id": 1, "title": "Great Article", "url": "https://example.com", "reason": "Very relevant"}
+    pick = {
+        "id": 1,
+        "title": "Great Article",
+        "url": "https://example.com",
+        "reason": "Very relevant",
+    }
 
     with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
         ts = await post_pick("C123", "111.222", pick)
@@ -52,7 +57,12 @@ async def test_post_pick_posts_to_thread():
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "333.444"})
-    pick = {"id": 1, "title": "Great Article", "url": "https://example.com", "reason": "Very relevant"}
+    pick = {
+        "id": 1,
+        "title": "Great Article",
+        "url": "https://example.com",
+        "reason": "Very relevant",
+    }
 
     with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
         await post_pick("C123", "111.222", pick)
@@ -68,7 +78,12 @@ async def test_post_pick_message_contains_title_and_reason():
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "333.444"})
-    pick = {"id": 1, "title": "Great Article", "url": "https://example.com", "reason": "Very relevant"}
+    pick = {
+        "id": 1,
+        "title": "Great Article",
+        "url": "https://example.com",
+        "reason": "Very relevant",
+    }
 
     with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
         await post_pick("C123", "111.222", pick)
@@ -85,7 +100,11 @@ async def test_post_pick_handles_missing_reason():
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "333.444"})
-    pick = {"id": 1, "title": "Great Article", "url": "https://example.com"}  # no reason
+    pick = {
+        "id": 1,
+        "title": "Great Article",
+        "url": "https://example.com",
+    }  # no reason
 
     with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
         ts = await post_pick("C123", "111.222", pick)

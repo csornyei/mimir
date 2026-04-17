@@ -53,14 +53,18 @@ async def test_get_entries_raises_when_url_missing():
 
 @pytest.mark.asyncio
 async def test_get_entries_raises_when_username_missing():
-    client = RSSClient(url="https://miniflux.example.com", username=None, password="pass")
+    client = RSSClient(
+        url="https://miniflux.example.com", username=None, password="pass"
+    )
     with pytest.raises(RuntimeError, match="MINIFLUX_USERNAME"):
         await client.get_entries(START, END)
 
 
 @pytest.mark.asyncio
 async def test_get_entries_raises_when_password_missing():
-    client = RSSClient(url="https://miniflux.example.com", username="user", password=None)
+    client = RSSClient(
+        url="https://miniflux.example.com", username="user", password=None
+    )
     with pytest.raises(RuntimeError, match="MINIFLUX_PASSWORD"):
         await client.get_entries(START, END)
 
@@ -71,7 +75,9 @@ async def test_get_entries_returns_parsed_entries():
     mock_client = MagicMock()
     mock_client.get_entries.return_value = _make_miniflux_response([entry])
 
-    client = RSSClient(url="https://miniflux.example.com", username="user", password="pass")
+    client = RSSClient(
+        url="https://miniflux.example.com", username="user", password="pass"
+    )
     with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 
@@ -91,7 +97,9 @@ async def test_get_entries_passes_correct_params():
     mock_client = MagicMock()
     mock_client.get_entries.return_value = _make_miniflux_response([])
 
-    client = RSSClient(url="https://miniflux.example.com", username="user", password="pass")
+    client = RSSClient(
+        url="https://miniflux.example.com", username="user", password="pass"
+    )
     with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
         await client.get_entries(START, END)
 
@@ -108,7 +116,9 @@ async def test_get_entries_summary_truncated_to_500_chars():
     mock_client = MagicMock()
     mock_client.get_entries.return_value = _make_miniflux_response([entry])
 
-    client = RSSClient(url="https://miniflux.example.com", username="user", password="pass")
+    client = RSSClient(
+        url="https://miniflux.example.com", username="user", password="pass"
+    )
     with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 
@@ -121,7 +131,9 @@ async def test_get_entries_summary_none_when_no_content():
     mock_client = MagicMock()
     mock_client.get_entries.return_value = _make_miniflux_response([entry])
 
-    client = RSSClient(url="https://miniflux.example.com", username="user", password="pass")
+    client = RSSClient(
+        url="https://miniflux.example.com", username="user", password="pass"
+    )
     with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 
@@ -140,7 +152,9 @@ async def test_get_entries_paginates_when_total_exceeds_page():
         {"total": 105, "entries": []},
     ]
 
-    client = RSSClient(url="https://miniflux.example.com", username="user", password="pass")
+    client = RSSClient(
+        url="https://miniflux.example.com", username="user", password="pass"
+    )
     with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 

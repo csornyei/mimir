@@ -62,7 +62,9 @@ async def patch_approval(
     try:
         status = ActionStatus(body.status)
     except ValueError:
-        logger.warning("invalid_action_status_patch", status=body.status, action_id=str(action_id))
+        logger.warning(
+            "invalid_action_status_patch", status=body.status, action_id=str(action_id)
+        )
         raise HTTPException(status_code=422, detail=f"Unknown status: {body.status!r}")
 
     action = await store.get_by_id(session, action_id)

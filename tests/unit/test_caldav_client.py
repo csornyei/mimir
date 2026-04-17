@@ -94,7 +94,9 @@ async def test_get_events_returns_parsed_events():
     calendar = _make_calendar([dav_event])
     dav_client = _make_dav_client([calendar])
 
-    client = CalDAVClient(url="https://cal.example.com", username="user", password="pass")
+    client = CalDAVClient(
+        url="https://cal.example.com", username="user", password="pass"
+    )
 
     with patch("mimir.external.caldav.client.DAVClient", return_value=dav_client):
         result = await client.get_events(START, END)
@@ -116,7 +118,9 @@ async def test_get_events_optional_fields_none_when_missing():
     calendar = _make_calendar([dav_event])
     dav_client = _make_dav_client([calendar])
 
-    client = CalDAVClient(url="https://cal.example.com", username="user", password="pass")
+    client = CalDAVClient(
+        url="https://cal.example.com", username="user", password="pass"
+    )
 
     with patch("mimir.external.caldav.client.DAVClient", return_value=dav_client):
         result = await client.get_events(START, END)
@@ -136,7 +140,9 @@ async def test_get_events_flattens_multiple_calendars():
     cal_b = _make_calendar([_make_caldav_event([vevent_b])])
     dav_client = _make_dav_client([cal_a, cal_b])
 
-    client = CalDAVClient(url="https://cal.example.com", username="user", password="pass")
+    client = CalDAVClient(
+        url="https://cal.example.com", username="user", password="pass"
+    )
 
     with patch("mimir.external.caldav.client.DAVClient", return_value=dav_client):
         result = await client.get_events(START, END)
@@ -151,7 +157,9 @@ async def test_get_events_passes_date_range_to_search():
     calendar = _make_calendar([])
     dav_client = _make_dav_client([calendar])
 
-    client = CalDAVClient(url="https://cal.example.com", username="user", password="pass")
+    client = CalDAVClient(
+        url="https://cal.example.com", username="user", password="pass"
+    )
 
     with patch("mimir.external.caldav.client.DAVClient", return_value=dav_client):
         await client.get_events(START, END)

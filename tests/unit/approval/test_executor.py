@@ -20,7 +20,9 @@ def _make_action(payload: dict) -> PendingActionModel:
 async def test_execute_tool_call_dispatches_with_action_id():
     """executor.execute() must inject action_id into the dispatch args."""
     action = _make_action({"tool_name": "restart_pod", "arguments": {"pod": "api"}})
-    dispatch_mock = AsyncMock(return_value={"result": "pod restarted", "isError": False})
+    dispatch_mock = AsyncMock(
+        return_value={"result": "pod restarted", "isError": False}
+    )
 
     with patch(
         "mimir.agent.approval.executor.tool_dispatcher.dispatch",

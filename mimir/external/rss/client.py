@@ -28,27 +28,46 @@ def _strip_html(html: str) -> str:
 
 
 class RSSClient:
-    def __init__(self, url: str | None, username: str | None, password: str | None) -> None:
+    def __init__(
+        self, url: str | None, username: str | None, password: str | None
+    ) -> None:
         self.url = url
         self.username = username
         self.password = password
+        self.client: miniflux.Client | None = None
 
-    async def get_entries(self, after: datetime, before: datetime) -> list[dict[str, Any]]:
+    def _set_client(self) -> None:
         if self.url is None:
             raise RuntimeError("MINIFLUX_URL is not configured.")
         if self.username is None:
             raise RuntimeError("MINIFLUX_USERNAME is not configured.")
         if self.password is None:
             raise RuntimeError("MINIFLUX_PASSWORD is not configured.")
+        self.client = miniflux.Client(
+            self.url, username=self.username, password=self.password
+        )
+
+    async def get_entries(
+        self, after: datetime, before: datetime
+    ) -> list[dict[str, Any]]:
+        if self.url is None:
+            raise RuntimeError("MINIFLUX_URL is not configured.")
+        if self.username is None:
+            raise RuntimeError("MINIFLUX_USERNAME is not configured.")
+        if self.password is None:
+            raise RuntimeError("MINIFLUX_PASSWORD is not configured.")
+
         return await asyncio.to_thread(self._fetch_entries, after, before)
 
     def _fetch_entries(self, after: datetime, before: datetime) -> list[dict[str, Any]]:
-        client = miniflux.Client(self.url, username=self.username, password=self.password)
+        if self.client is None:
+            self._set_client()
+
         all_entries: list[dict[str, Any]] = []
         offset = 0
         total = None
         while True:
-            response = client.get_entries(
+            response = self.client.get_entries(  # ty: ignore
                 status="unread",
                 published_after=int(after.timestamp()),
                 published_before=int(before.timestamp()),

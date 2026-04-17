@@ -197,12 +197,12 @@ class RssDigestEntry(Base):
     url: Mapped[str] = mapped_column(Text, nullable=False)
     feed_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     category: Mapped[str | None] = mapped_column(Text, nullable=True)
-    digest_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    digest_run_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     window: Mapped[str] = mapped_column(String(10), nullable=False)
     slack_channel_id: Mapped[str] = mapped_column(String, nullable=False)
     slack_message_ts: Mapped[str] = mapped_column(String, nullable=False)
     reaction: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
-    __table_args__ = (
-        Index("ix_rss_digest_entries_message_ts", "slack_message_ts"),
-    )
+    __table_args__ = (Index("ix_rss_digest_entries_message_ts", "slack_message_ts"),)

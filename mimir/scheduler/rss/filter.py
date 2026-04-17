@@ -43,7 +43,9 @@ def _build_prompt(
 
 
 def _parse_picks(content: str) -> list[dict[str, Any]]:
-    stripped = re.sub(r"```(?:json)?\n?(.*?)```", r"\1", content, flags=re.DOTALL).strip()
+    stripped = re.sub(
+        r"```(?:json)?\n?(.*?)```", r"\1", content, flags=re.DOTALL
+    ).strip()
     # Try direct parse first
     try:
         result = json.loads(stripped)

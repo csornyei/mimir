@@ -77,7 +77,8 @@ async def consolidate_idle_threads() -> None:
                     update(ConversationModel)
                     .where(ConversationModel.id == thread_id)
                     .values(
-                        consolidation_retries=ConversationModel.consolidation_retries + 1
+                        consolidation_retries=ConversationModel.consolidation_retries
+                        + 1
                     )
                 )
                 await session.commit()
