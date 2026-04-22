@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 # Re-export Base so existing code that does `from mimir.db import Base` keeps working.
 from mimir.base import Base  # noqa: F401
+from mimir.telemetry import instrument_sqlalchemy
 
 _engine = None
 _async_session_factory = None
@@ -14,6 +15,7 @@ def initialize_db(database_url: str) -> None:
     """Initialize the database engine. Must be called once per app at startup."""
     global _engine, _async_session_factory
     _engine = create_async_engine(database_url)
+    instrument_sqlalchemy(_engine)
     _async_session_factory = async_sessionmaker(_engine, expire_on_commit=False)
 
 

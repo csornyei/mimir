@@ -13,6 +13,9 @@ from mimir.db import initialize_db, dispose_db
 from mimir.interfaces.slack.config import slack_config
 from mimir.interfaces.slack.utils import get_bot_user_id
 from mimir.logger import logger
+from mimir.telemetry import setup_tracing, slack_span
+
+setup_tracing(service_name="mimir-slack-bot")
 
 app = AsyncApp(token=slack_config.slack_bot_token)
 
@@ -105,6 +108,7 @@ async def _agent_reply(
 
 
 @app.event("reaction_added")
+@slack_span("reaction_added")
 async def handle_reaction_added(event: dict, client: Any) -> None:
     logger.debug("received_reaction_added_event", slack_event=event)
     await slack_approval.on_reaction_added(event, client)
@@ -115,6 +119,7 @@ async def handle_reaction_added(event: dict, client: Any) -> None:
 
 
 @app.event("app_mention")
+@slack_span("app_mention")
 async def handle_mention(event: dict, say: Any, client: Any) -> None:
     logger.debug("received_mention_event", slack_event=event)
     bot_id = await get_bot_user_id(client)
@@ -149,6 +154,7 @@ async def handle_mention(event: dict, say: Any, client: Any) -> None:
 
 
 @app.event("message")
+@slack_span("message")
 async def handle_message(event: dict, say: Any, client: Any) -> None:
     logger.debug("received_message_event", slack_event=event)
 

@@ -23,6 +23,9 @@ services:
       SEMANTIC_MEMORY_PATH: /vault/memory.md
       ENV: production
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
+      SERVICE_NAME: agent_core
+    profiles:
+      - agent
     volumes:
       - ${VAULT_PATH:-./vault}:/vault
       - ./scratch/memory.md:/vault/memory.md
@@ -37,6 +40,9 @@ services:
     environment:
       AGENT_URL: http://mimir-api:8000
       ENV: production
+      SERVICE_NAME: slack_interface
+    profiles:
+      - agent
     depends_on:
       - mimir-api
     restart: unless-stopped
@@ -55,6 +61,9 @@ services:
       SEARXNG_URL: https://searxng:8080
       SEMANTIC_MEMORY_PATH: /vault/memory.md
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
+      SERVICE_NAME: mcp_server
+    profiles:
+      - agent
     volumes:
       - ${KUBECONFIG:-~/.kube/config}:/kubeconfig:ro
       - ./scratch/memory.md:/vault/memory.md
@@ -70,6 +79,8 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
+    profiles:
+      - database
 
   searxng:
     container_name: searxng-core
@@ -80,7 +91,55 @@ services:
     volumes:
       - ./scratch/searxng/:/etc/searxng/:Z
       - core-data:/var/cache/searxng/
+    profiles:
+      - support
+
+  # Monitoring
+  alloy:
+    image: grafana/alloy:latest
+    ports:
+      - "12345:12345" # Alloy UI
+      - "4317:4317" # OTLP gRPC
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock
+    profiles:
+      - monitoring
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+
+  tempo:
+    image: grafana/tempo:latest
+    volumes:
+      - ./monitoring/tempo/config.yaml:/etc/tempo/config.yaml
+    profiles:
+      - monitoring
+    command: -config.file=/etc/tempo/config.yaml
+
+  loki:
+    image: grafana/loki:latest
+    command: -config.file=/etc/loki/config.yaml
+    volumes:
+      - ./monitoring/loki/config.yaml:/etc/loki/config.yaml
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    depends_on:
+      - alloy
+      - tempo
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    profiles:
+      - monitoring
 
 volumes:
   pgdata:
   core-data:
+  monitoring-data:
