@@ -45,5 +45,23 @@ class MimirConfig(BaseSettings):
     tool_max_steps: int = 5
     tool_call_timeout_seconds: int = 30
 
+    # CalDAV integration
+    caldav_url: str | None = None
+    caldav_username: str | None = None
+    caldav_password: str | None = None
+
+    # Morning briefing
+    morning_brief_channel_id: str | None = None
+    morning_brief_hour: int = 7
+    newspaper_channel_id: str | None = None
+    slack_user_id: str = ""
+
+    # Miniflux / RSS
+    miniflux_url: str | None = None
+    miniflux_username: str | None = None
+    miniflux_password: str | None = None
+    rss_digest_min_entries: int = 10
+    rss_digest_picks: int = 10
+
 
 config = MimirConfig()

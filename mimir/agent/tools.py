@@ -70,10 +70,14 @@ class ToolDispatcher:
             tool_results = []
             for tc in tool_calls:
                 tool_name = tc.get("function", {}).get("name") or tc.get("name")
-                args_raw = tc.get("function", {}).get("arguments") or tc.get("arguments", "{}")
+                args_raw = tc.get("function", {}).get("arguments") or tc.get(
+                    "arguments", "{}"
+                )
 
                 try:
-                    args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+                    args = (
+                        json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+                    )
                 except json.JSONDecodeError as e:
                     logger.warning(
                         "tool_args_json_decode_failed",
@@ -83,7 +87,9 @@ class ToolDispatcher:
                     args = {}
 
                 if _is_write_tool(tool_name, tools):
-                    result = await self._request_write_approval(tool_name, args, triggered_by)
+                    result = await self._request_write_approval(
+                        tool_name, args, triggered_by
+                    )
                     approval_requested = True
                 else:
                     result = await self.dispatch(tool_name, args)
@@ -100,7 +106,8 @@ class ToolDispatcher:
             messages.extend(tool_results)
 
             if approval_requested:
-                return "I've requested your approval. Please check your DMs to confirm."
+                final = await llm_client.complete(messages=messages, tools=tools)
+                return final.get("content", "")
 
         logger.warning("tool_loop_max_steps_exceeded", max_steps=max_steps)
         return (
@@ -133,7 +140,9 @@ class ToolDispatcher:
                 "message": "Approval request sent. I'll proceed once you confirm in the DMs.",
             }
         except Exception as e:
-            logger.error("write_tool_approval_failed", tool_name=tool_name, error=str(e))
+            logger.error(
+                "write_tool_approval_failed", tool_name=tool_name, error=str(e)
+            )
             return {"error": f"Failed to request approval: {e}"}
 
     async def close(self):

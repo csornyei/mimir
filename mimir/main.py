@@ -1,7 +1,5 @@
 from contextlib import asynccontextmanager
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 
 from mimir.config import config
@@ -14,25 +12,13 @@ from mimir.routes.approvals import router as approvals_router
 from mimir.routes.chat import router as chat_router
 from mimir.routes.conversations import router as conversations_router
 from mimir.routes.ingest import router as ingest_router
-from mimir.scheduler.jobs import consolidate_idle_threads, process_approval_timeouts
+from mimir.scheduler.jobs import create_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     initialize_db(config.database_url)
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        consolidate_idle_threads,
-        IntervalTrigger(minutes=5),
-        id="consolidate_idle_threads",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        process_approval_timeouts,
-        IntervalTrigger(minutes=1),
-        id="process_approval_timeouts",
-        replace_existing=True,
-    )
+    scheduler = create_scheduler()
     scheduler.start()
     logger.info("agent_api_started")
 

@@ -1,91 +1,101 @@
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select, update
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from mimir.agent.approval import manager as approval_manager
 from mimir.config import config
 from mimir.db import get_session
-from mimir.logger import logger
-from mimir.memory.episodic import EpisodicMemory
-from mimir.models import ConversationModel, MessageModel
-
-
-async def consolidate_idle_threads() -> None:
-    """
-    Scheduled job (runs every 5 minutes) that finds conversations eligible for
-    consolidation and writes episodic memory summaries.
-
-    Two cases are handled:
-    - Fresh: never consolidated, idle for episodic_idle_minutes, under the retry limit.
-    - Re-consolidation: already consolidated but new messages arrived since then.
-    """
-    cutoff = datetime.now(UTC) - timedelta(minutes=config.episodic_idle_minutes)
-
-    fresh_ids: list[str] = []
-    re_consolidation_ids: list[str] = []
-
-    async with get_session() as session:
-        # Case A — never consolidated.
-        fresh_rows = await session.scalars(
-            select(ConversationModel).where(
-                ConversationModel.last_active < cutoff,
-                ConversationModel.consolidated_at.is_(None),
-                ConversationModel.consolidation_retries < config.episodic_max_retries,
-            )
-        )
-        fresh_ids = [c.id for c in fresh_rows.all()]
-
-        # Case B — previously consolidated; check for new messages.
-        prev_rows = await session.scalars(
-            select(ConversationModel).where(
-                ConversationModel.last_active < cutoff,
-                ConversationModel.consolidated_at.is_not(None),
-                ConversationModel.consolidation_retries < config.episodic_max_retries,
-            )
-        )
-        for conv in prev_rows.all():
-            new_count = await session.scalar(
-                select(func.count()).where(
-                    MessageModel.conversation_id == conv.id,
-                    MessageModel.timestamp > conv.consolidated_at,
-                )
-            )
-            if new_count is None:
-                continue
-            if new_count >= config.episodic_new_messages_threshold:
-                re_consolidation_ids.append(conv.id)
-
-    all_ids = fresh_ids + re_consolidation_ids
-    if not all_ids:
-        return
-
-    logger.debug(
-        "consolidation_job_start",
-        fresh=len(fresh_ids),
-        re_consolidation=len(re_consolidation_ids),
-    )
-
-    for thread_id in all_ids:
-        async with get_session() as session:
-            memory = EpisodicMemory(session)
-            try:
-                consolidated = await memory.consolidate(thread_id)
-                if consolidated:
-                    logger.debug("consolidated_thread", thread_id=thread_id)
-            except Exception as e:
-                logger.error("consolidation_failed", thread_id=thread_id, error=str(e))
-                await session.execute(
-                    update(ConversationModel)
-                    .where(ConversationModel.id == thread_id)
-                    .values(
-                        consolidation_retries=ConversationModel.consolidation_retries
-                        + 1
-                    )
-                )
-                await session.commit()
+from mimir.scheduler.briefing.job import run_morning_briefing
+from mimir.scheduler.memory.consolidate import consolidate_idle_threads
+from mimir.scheduler.rss.job import run_digest
 
 
 async def process_approval_timeouts() -> None:
     """Scheduled job (runs every minute) that auto-rejects timed-out approval requests."""
     async with get_session() as session:
         await approval_manager.process_timeouts(session)
+
+
+async def send_morning_briefing() -> None:
+    """Scheduled job: fetch today's calendar events and post a morning briefing to Slack."""
+    await run_morning_briefing()
+
+
+async def send_rss_digest_08() -> None:
+    """Scheduled job: fetch overnight articles (20:00 → 08:00) and post digest."""
+    now = datetime.now(UTC)
+    end = now.replace(hour=8, minute=0, second=0, microsecond=0)
+    if end > now:
+        end -= timedelta(days=1)
+    start = end - timedelta(hours=12)
+    await run_digest(start, end, "20-08")
+
+
+async def send_rss_digest_12() -> None:
+    """Scheduled job: fetch morning articles (08:00 → 12:00) and post digest."""
+    end = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=4)
+    await run_digest(start, end, "08-12")
+
+
+async def send_rss_digest_16() -> None:
+    """Scheduled job: fetch midday articles (12:00 → 16:00) and post digest."""
+    end = datetime.now(UTC).replace(hour=16, minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=4)
+    await run_digest(start, end, "12-16")
+
+
+async def send_rss_digest_20() -> None:
+    """Scheduled job: fetch afternoon articles (16:00 → 20:00) and post digest."""
+    end = datetime.now(UTC).replace(hour=20, minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=4)
+    await run_digest(start, end, "16-20")
+
+
+def create_scheduler() -> AsyncIOScheduler:
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        consolidate_idle_threads,
+        IntervalTrigger(minutes=5),
+        id="consolidate_idle_threads",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        process_approval_timeouts,
+        IntervalTrigger(minutes=1),
+        id="process_approval_timeouts",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_morning_briefing,
+        CronTrigger(hour=config.morning_brief_hour, timezone="UTC"),
+        id="morning_briefing",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_rss_digest_08,
+        CronTrigger(hour=8, minute=0, timezone="UTC"),
+        id="rss_digest_08",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_rss_digest_12,
+        CronTrigger(hour=12, minute=0, timezone="UTC"),
+        id="rss_digest_12",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_rss_digest_16,
+        CronTrigger(hour=16, minute=0, timezone="UTC"),
+        id="rss_digest_16",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_rss_digest_20,
+        CronTrigger(hour=20, minute=0, timezone="UTC"),
+        id="rss_digest_20",
+        replace_existing=True,
+    )
+    return scheduler

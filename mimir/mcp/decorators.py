@@ -1,6 +1,5 @@
 import functools
 import inspect
-from datetime import UTC, datetime
 from uuid import UUID
 
 from mcp.types import ToolAnnotations

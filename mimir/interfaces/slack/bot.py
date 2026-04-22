@@ -7,6 +7,7 @@ from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
 from mimir.interfaces.slack import approval as slack_approval
+from mimir.scheduler.rss import feedback as rss_feedback
 from mimir.agent import client as agent_client
 from mimir.db import initialize_db, dispose_db
 from mimir.config import config
@@ -107,6 +108,10 @@ async def _agent_reply(
 async def handle_reaction_added(event: dict, client: Any) -> None:
     logger.debug("received_reaction_added_event", slack_event=event)
     await slack_approval.on_reaction_added(event, client)
+    try:
+        await rss_feedback.on_digest_reaction(event, client)
+    except Exception as e:
+        logger.error("rss_feedback_reaction_failed", error=str(e))
 
 
 @app.event("app_mention")

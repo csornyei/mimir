@@ -8,5 +8,9 @@ class MCPConfig(BaseSettings):
     semantic_memory_path: str = "vault/memory.md"
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mimir"
 
+    caldav_url: str | None = None
+    caldav_username: str | None = None
+    caldav_password: str | None = None
+
 
 mcp_config = MCPConfig()

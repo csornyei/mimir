@@ -40,11 +40,12 @@ async def test_write_tool_requests_approval_not_dispatch(mocker):
 
     mock_session = AsyncMock()
 
-    with patch("mimir.agent.tools.llm_client") as mock_llm, \
-         patch("mimir.agent.tools.get_session") as mock_session_ctx, \
-         patch("mimir.agent.approval.manager.request_approval", new=approval_mock), \
-         patch("mimir.agent.tools.ToolDispatcher.dispatch", new=dispatch_mock):
-
+    with (
+        patch("mimir.agent.tools.llm_client") as mock_llm,
+        patch("mimir.agent.tools.get_session") as mock_session_ctx,
+        patch("mimir.agent.approval.manager.request_approval", new=approval_mock),
+        patch("mimir.agent.tools.ToolDispatcher.dispatch", new=dispatch_mock),
+    ):
         mock_llm.complete = AsyncMock(side_effect=llm_responses)
         mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -52,7 +53,13 @@ async def test_write_tool_requests_approval_not_dispatch(mocker):
         dispatcher = ToolDispatcher()
         result = await dispatcher.run_tool_loop(
             messages=[{"role": "user", "content": "do the thing"}],
-            tools=[{"type": "function", "function": {"name": "restricted_tool", "parameters": {}}, "destructive": True}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {"name": "restricted_tool", "parameters": {}},
+                    "destructive": True,
+                }
+            ],
             triggered_by="user:U123",
         )
 
@@ -74,13 +81,21 @@ async def test_read_tool_dispatches_directly(mocker):
         _llm_final("No pods running."),
     ]
 
-    with patch("mimir.agent.tools.llm_client") as mock_llm, \
-         patch("mimir.agent.tools.ToolDispatcher.dispatch", new=dispatch_mock):
+    with (
+        patch("mimir.agent.tools.llm_client") as mock_llm,
+        patch("mimir.agent.tools.ToolDispatcher.dispatch", new=dispatch_mock),
+    ):
         mock_llm.complete = AsyncMock(side_effect=llm_responses)
         dispatcher = ToolDispatcher()
         result = await dispatcher.run_tool_loop(
             messages=[{"role": "user", "content": "list pods"}],
-            tools=[{"type": "function", "function": {"name": "list_pods", "parameters": {}}, "destructive": False}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {"name": "list_pods", "parameters": {}},
+                    "destructive": False,
+                }
+            ],
             triggered_by="user:U123",
         )
 
@@ -104,10 +119,14 @@ async def test_write_tool_injects_approval_pending_result(mocker):
 
     mock_session = AsyncMock()
 
-    with patch("mimir.agent.tools.llm_client") as mock_llm, \
-         patch("mimir.agent.tools.get_session") as mock_session_ctx, \
-         patch("mimir.agent.approval.manager.request_approval", new=AsyncMock(return_value=fake_action)):
-
+    with (
+        patch("mimir.agent.tools.llm_client") as mock_llm,
+        patch("mimir.agent.tools.get_session") as mock_session_ctx,
+        patch(
+            "mimir.agent.approval.manager.request_approval",
+            new=AsyncMock(return_value=fake_action),
+        ),
+    ):
         mock_llm.complete = AsyncMock(side_effect=capture_complete)
         mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -115,7 +134,13 @@ async def test_write_tool_injects_approval_pending_result(mocker):
         dispatcher = ToolDispatcher()
         await dispatcher.run_tool_loop(
             messages=[{"role": "user", "content": "save this"}],
-            tools=[{"type": "function", "function": {"name": "write_mem", "parameters": {}}, "destructive": True}],
+            tools=[
+                {
+                    "type": "function",
+                    "function": {"name": "write_mem", "parameters": {}},
+                    "destructive": True,
+                }
+            ],
         )
 
     second_call_messages = captured_messages[1]
