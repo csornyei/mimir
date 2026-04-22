@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.llm.client import llm_client
 from mimir.models import ConversationModel, EpisodicMemoryModel, MessageModel
-from mimir.config import config
+from mimir.agent.config import agent_config
 
 _CONSOLIDATION_MIN_MESSAGES = 5
 _RETRIEVAL_THRESHOLD = 0.6
@@ -54,7 +54,7 @@ class EpisodicMemory:
             return False
         if (
             conv.consolidated_at is not None
-            and len(messages) < config.episodic_new_messages_threshold
+            and len(messages) < agent_config.episodic_new_messages_threshold
         ):
             return False
 

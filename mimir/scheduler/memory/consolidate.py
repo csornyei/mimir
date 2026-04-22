@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select, update
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.db import get_session
 from mimir.logger import logger
 from mimir.memory.episodic import EpisodicMemory
@@ -18,7 +18,7 @@ async def consolidate_idle_threads() -> None:
     - Fresh: never consolidated, idle for episodic_idle_minutes, under the retry limit.
     - Re-consolidation: already consolidated but new messages arrived since then.
     """
-    cutoff = datetime.now(UTC) - timedelta(minutes=config.episodic_idle_minutes)
+    cutoff = datetime.now(UTC) - timedelta(minutes=agent_config.episodic_idle_minutes)
 
     fresh_ids: list[str] = []
     re_consolidation_ids: list[str] = []
@@ -29,7 +29,8 @@ async def consolidate_idle_threads() -> None:
             select(ConversationModel).where(
                 ConversationModel.last_active < cutoff,
                 ConversationModel.consolidated_at.is_(None),
-                ConversationModel.consolidation_retries < config.episodic_max_retries,
+                ConversationModel.consolidation_retries
+                < agent_config.episodic_max_retries,
             )
         )
         fresh_ids = [c.id for c in fresh_rows.all()]
@@ -39,7 +40,8 @@ async def consolidate_idle_threads() -> None:
             select(ConversationModel).where(
                 ConversationModel.last_active < cutoff,
                 ConversationModel.consolidated_at.is_not(None),
-                ConversationModel.consolidation_retries < config.episodic_max_retries,
+                ConversationModel.consolidation_retries
+                < agent_config.episodic_max_retries,
             )
         )
         for conv in prev_rows.all():
@@ -51,7 +53,7 @@ async def consolidate_idle_threads() -> None:
             )
             if new_count is None:
                 continue
-            if new_count >= config.episodic_new_messages_threshold:
+            if new_count >= agent_config.episodic_new_messages_threshold:
                 re_consolidation_ids.append(conv.id)
 
     all_ids = fresh_ids + re_consolidation_ids

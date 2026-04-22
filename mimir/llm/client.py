@@ -4,7 +4,7 @@ import re
 
 from httpx import AsyncClient, HTTPStatusError
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.logger import logger
 from mimir.llm.embedding import embedding_model
 
@@ -46,11 +46,11 @@ class LLMClient:
             "Content-Type": "application/json",
         }
 
-        if config.api_key:
-            headers["Authorization"] = f"Bearer {config.api_key}"
+        if agent_config.api_key:
+            headers["Authorization"] = f"Bearer {agent_config.api_key}"
 
         self._client = AsyncClient(
-            base_url=config.llm_base_url, headers=headers, timeout=120.0
+            base_url=agent_config.llm_base_url, headers=headers, timeout=120.0
         )
 
     async def complete(
@@ -67,10 +67,10 @@ class LLMClient:
         for attempt, msgs in enumerate(candidates):
             try:
                 payload = {
-                    "model": config.llm_model,
+                    "model": agent_config.llm_model,
                     "messages": msgs,
-                    "max_tokens": max_tokens or config.llm_max_tokens,
-                    "temperature": temperature or config.llm_temperature,
+                    "max_tokens": max_tokens or agent_config.llm_max_tokens,
+                    "temperature": temperature or agent_config.llm_temperature,
                 }
 
                 if tools:

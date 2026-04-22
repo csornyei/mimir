@@ -10,7 +10,7 @@ from watchdog.events import (
 )
 from watchdog.observers import Observer
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.db import get_session
 from mimir.logger import logger
 from mimir.rag.ingest import ingest_file
@@ -52,7 +52,7 @@ class AsyncFileWatcher:
         self._observer: Observer | None = None  # type: ignore
 
     async def start(self) -> None:
-        vault_path = config.vault_path
+        vault_path = agent_config.vault_path
         loop = asyncio.get_running_loop()
         handler = _VaultEventHandler(loop)
         self._observer = Observer()

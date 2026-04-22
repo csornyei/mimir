@@ -3,7 +3,7 @@ import json
 from typing import Any
 
 from mimir.agent.mcp_client import call_tool
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.db import get_session
 from mimir.logger import logger
 from mimir.llm.client import llm_client
@@ -27,9 +27,7 @@ class ToolDispatcher:
             return result
 
         except asyncio.TimeoutError:
-            error_msg = (
-                f"Tool {tool_name} timed out after {config.tool_call_timeout_seconds}s"
-            )
+            error_msg = f"Tool {tool_name} timed out after {agent_config.tool_call_timeout_seconds}s"
             logger.error("tool_timeout", tool_name=tool_name)
             return {"error": error_msg}
 
@@ -45,7 +43,7 @@ class ToolDispatcher:
         max_steps: int | None = None,
         triggered_by: str = "agent",
     ) -> str:
-        max_steps = max_steps or config.tool_max_steps
+        max_steps = max_steps or agent_config.tool_max_steps
         messages = messages.copy()  # Don't mutate caller's list
 
         for step in range(max_steps):

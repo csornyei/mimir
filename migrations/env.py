@@ -7,7 +7,7 @@ from sqlalchemy import pool
 from alembic import context
 
 from mimir.base import Base
-from mimir.config import config as app_config
+from mimir.config import shared_config
 from mimir import models  # noqa: F401 - registers all models with Base.metadata
 
 alembic_config = context.config
@@ -26,7 +26,7 @@ def do_run_migrations(connection):
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=app_config.database_url,
+        url=shared_config.database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -36,7 +36,9 @@ def run_migrations_offline() -> None:
 
 
 async def run_async_migrations() -> None:
-    connectable = create_async_engine(app_config.database_url, poolclass=pool.NullPool)
+    connectable = create_async_engine(
+        shared_config.database_url, poolclass=pool.NullPool
+    )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()

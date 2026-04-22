@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.db import initialize_db, dispose_db
 from mimir.logger import logger
 from mimir.llm.client import llm_client
@@ -17,7 +17,7 @@ from mimir.scheduler.jobs import create_scheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    initialize_db(config.database_url)
+    initialize_db(agent_config.database_url)
     scheduler = create_scheduler()
     scheduler.start()
     logger.info("agent_api_started")

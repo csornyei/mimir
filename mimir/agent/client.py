@@ -1,6 +1,6 @@
 import httpx
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.logger import logger
 from mimir.schemas import ChatRequest, ChatResponse
 
@@ -31,7 +31,7 @@ async def send_to_agent(
 
         try:
             response = await client.post(
-                f"{config.agent_url}/api/chat",
+                f"{agent_config.agent_url}/api/chat",
                 json=payload.model_dump(),
             )
             response.raise_for_status()

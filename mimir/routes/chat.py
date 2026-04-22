@@ -5,7 +5,7 @@ from mimir.agent.tool_schema import tool_schema_registry
 from mimir.agent.tools import tool_dispatcher
 from mimir.db import get_db
 from mimir.logger import logger
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.agent.conversation import conversation_manager
 from mimir.schemas import ChatRequest, ChatResponse
 from mimir.memory.semantic import SemanticMemory
@@ -46,7 +46,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         rag_tokens_used = 0
         for content, metadata in rag_result_sorted:
             chunk_tokens = token_estimate(content)
-            if rag_tokens_used + chunk_tokens > config.rag_max_tokens:
+            if rag_tokens_used + chunk_tokens > agent_config.rag_max_tokens:
                 logger.warning(
                     "rag_chunk_dropped",
                     score=metadata.get("score"),
@@ -72,7 +72,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     try:
         episodic_mem = EpisodicMemory(db)
         episodic_memories = await episodic_mem.retrieve(
-            request.message, k=config.episodic_retrieval_k
+            request.message, k=agent_config.episodic_retrieval_k
         )
         episodic_context = format_episodic_context(episodic_memories)
         logger.debug("episodic_retrieval", count=len(episodic_memories))
@@ -95,20 +95,28 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     # --- Assemble system prompt (trims semantic memory + episodic internally) ---
     system_prompt = build_system_prompt(
-        owner=config.owner_name,
+        owner=agent_config.owner_name,
         semantic_memory=memory_content,
         episodic_context=episodic_context,
         rag_context=rag_context,
-        context_window=config.llm_context_window,
+        context_window=agent_config.llm_context_window,
         tools=tools,
     )
 
     # --- Dynamic conversation window ---
     system_tokens = token_estimate(system_prompt)
-    budget = config.llm_context_window - config.llm_max_tokens - 256 - system_tokens
+    budget = (
+        agent_config.llm_context_window
+        - agent_config.llm_max_tokens
+        - 256
+        - system_tokens
+    )
     n = budget // 200  # rough estimate: ~200 tokens per message
-    n = max(config.conversation_window_min, min(config.conversation_window_max, n))
-    if n < config.conversation_window_max:
+    n = max(
+        agent_config.conversation_window_min,
+        min(agent_config.conversation_window_max, n),
+    )
+    if n < agent_config.conversation_window_max:
         logger.warning("conversation_window_reduced", n=n, budget=budget)
 
     conversation_messages = await conversation_manager.window(
@@ -118,15 +126,15 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     # --- Pre-build fallback message lists for the 413 safety net ---
     system_prompt_reduced = build_system_prompt(
-        owner=config.owner_name,
+        owner=agent_config.owner_name,
         semantic_memory=memory_content,
-        context_window=config.llm_context_window,
+        context_window=agent_config.llm_context_window,
         tools=tools,
     )
     system_prompt_minimal = build_system_prompt(
-        owner=config.owner_name,
+        owner=agent_config.owner_name,
         semantic_memory="",
-        context_window=config.llm_context_window,
+        context_window=agent_config.llm_context_window,
         tools=tools,
     )
     messages_reduced = [
@@ -134,14 +142,14 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     ] + conversation_messages[-5:]
     messages_minimal = [
         {"role": "system", "content": system_prompt_minimal}
-    ] + conversation_messages[-config.conversation_window_min :]
+    ] + conversation_messages[-agent_config.conversation_window_min :]
 
     # --- Get final response (with or without tool loop) ---
     if tools:
         final_response = await tool_dispatcher.run_tool_loop(
             messages=messages,
             tools=tools,
-            max_steps=config.tool_max_steps,
+            max_steps=agent_config.tool_max_steps,
             triggered_by=f"user:{request.user_id}",
         )
     else:

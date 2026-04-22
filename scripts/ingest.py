@@ -11,7 +11,7 @@ import asyncio
 from pathlib import Path
 
 from mimir.db import get_session, initialize_db, dispose_db
-from mimir.config import config
+from mimir.config import shared_config
 from mimir.logger import logger
 from mimir.rag.ingest import ingest_file
 
@@ -75,6 +75,6 @@ def main() -> None:
 if __name__ == "__main__":
     from asyncio import run as asyncio_run
 
-    initialize_db(config.database_url)
+    initialize_db(shared_config.database_url)
     main()
     asyncio_run(dispose_db())

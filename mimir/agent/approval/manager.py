@@ -8,11 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from mimir.agent.approval import executor, store
 from mimir.models import ActionStatus, PendingActionModel
 from mimir.agent import client as agent_client
-from mimir.config import config
+from mimir.agent.config import agent_config
+from mimir.interfaces.slack.config import slack_config
 from mimir.logger import logger
 from mimir.const import APPROVE_EMOJI_NAMES, REJECT_EMOJI_NAMES
 
-_slack = AsyncWebClient(token=config.slack_bot_token)
+_slack = AsyncWebClient(token=slack_config.slack_bot_token)
 
 
 async def request_approval(
@@ -31,21 +32,21 @@ async def request_approval(
     text = format_approval_message(payload)
 
     slack_response = await _slack.chat_postMessage(
-        channel=config.slack_dm_channel_id,
+        channel=slack_config.slack_dm_channel_id,
         text=text,
     )
     message_ts: str = slack_response["ts"]
 
     timeout_at = (
-        datetime.now(UTC) + timedelta(minutes=config.approval_timeout_minutes)
-        if config.approval_timeout_minutes > 0
+        datetime.now(UTC) + timedelta(minutes=agent_config.approval_timeout_minutes)
+        if agent_config.approval_timeout_minutes > 0
         else None
     )
 
     action = await store.create(
         session,
         payload=payload,
-        channel_id=config.slack_dm_channel_id,
+        channel_id=slack_config.slack_dm_channel_id,
         message_ts=message_ts,
         triggered_by=triggered_by,
         timeout_at=timeout_at,
@@ -125,7 +126,7 @@ async def _handle_approve(
         logger.error("approval_execution_error", action_id=str(action.id), error=str(e))
         return
 
-    if config.approval_reinvoke_llm:
+    if agent_config.approval_reinvoke_llm:
         description = action.payload.get("description", "the action")
         reinvoke_message = f"[Tool result for '{description}'] {result}"
         try:

@@ -10,11 +10,11 @@ from mimir.interfaces.slack import approval as slack_approval
 from mimir.scheduler.rss import feedback as rss_feedback
 from mimir.agent import client as agent_client
 from mimir.db import initialize_db, dispose_db
-from mimir.config import config
+from mimir.interfaces.slack.config import slack_config
 from mimir.interfaces.slack.utils import get_bot_user_id
 from mimir.logger import logger
 
-app = AsyncApp(token=config.slack_bot_token)
+app = AsyncApp(token=slack_config.slack_bot_token)
 
 
 def _conversation_id(event: dict) -> str:
@@ -232,10 +232,10 @@ async def handle_message(event: dict, say: Any, client: Any) -> None:
 
 
 async def start():
-    logger.debug("configuring_slack_bot", config=config.model_dump())
+    logger.debug("configuring_slack_bot", config=slack_config.model_dump())
     logger.info("Starting Slack bot")
-    initialize_db(config.database_url)
-    handler = AsyncSocketModeHandler(app, config.slack_app_token)
+    initialize_db(slack_config.database_url)
+    handler = AsyncSocketModeHandler(app, slack_config.slack_app_token)
     await handler.start_async()
 
 

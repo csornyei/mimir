@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime
 
 from mimir.agent.mcp_client import fetch_tools_openai_format
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.logger import logger
 
 
@@ -43,7 +43,7 @@ class ToolSchemaRegistry:
         # Check if cache is still valid
         if not refresh and self._schemas is not None and self._cache_time is not None:
             age = (now - self._cache_time).total_seconds()
-            if age < config.mcp_schema_cache_ttl_seconds:
+            if age < agent_config.mcp_schema_cache_ttl_seconds:
                 logger.debug("tool_schemas_cached", age_seconds=int(age))
                 return self._schemas
 
@@ -56,7 +56,7 @@ class ToolSchemaRegistry:
                 and self._cache_time is not None
             ):
                 age = (now - self._cache_time).total_seconds()
-                if age < config.mcp_schema_cache_ttl_seconds:
+                if age < agent_config.mcp_schema_cache_ttl_seconds:
                     return self._schemas
 
             # Fetch from MCP server

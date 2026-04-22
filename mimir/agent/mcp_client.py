@@ -5,15 +5,19 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.logger import logger
 
 
 @asynccontextmanager
 async def _mcp_session():
     """Open a fully-initialized MCP session via streamable HTTP transport."""
-    logger.debug("establishing_mcp_session", url=config.mcp_url)
-    async with streamable_http_client(f"{config.mcp_url}/mcp") as (read, write, close):
+    logger.debug("establishing_mcp_session", url=agent_config.mcp_url)
+    async with streamable_http_client(f"{agent_config.mcp_url}/mcp") as (
+        read,
+        write,
+        close,
+    ):
         async with ClientSession(read, write) as session:
             await session.initialize()
             yield session

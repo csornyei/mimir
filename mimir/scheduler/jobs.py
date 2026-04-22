@@ -5,7 +5,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from mimir.agent.approval import manager as approval_manager
-from mimir.config import config
+from mimir.interfaces.slack.config import slack_config
 from mimir.db import get_session
 from mimir.scheduler.briefing.job import run_morning_briefing
 from mimir.scheduler.memory.consolidate import consolidate_idle_threads
@@ -70,7 +70,7 @@ def create_scheduler() -> AsyncIOScheduler:
     )
     scheduler.add_job(
         send_morning_briefing,
-        CronTrigger(hour=config.morning_brief_hour, timezone="UTC"),
+        CronTrigger(hour=slack_config.morning_brief_hour, timezone="UTC"),
         id="morning_briefing",
         replace_existing=True,
     )

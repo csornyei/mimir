@@ -12,9 +12,11 @@ from structlog.processors import (
 from structlog.dev import ConsoleRenderer
 
 
-ENV = os.getenv("ENV", "development")
+from mimir.config import shared_config
 
-renderer = JSONRenderer() if ENV == "production" else ConsoleRenderer()
+
+
+renderer = JSONRenderer() if shared_config.env == "production" else ConsoleRenderer()
 
 structlog.configure(
     cache_logger_on_first_use=True,
@@ -35,4 +37,4 @@ structlog.configure(
 )
 
 
-logger = structlog.get_logger(app_name="mimir")
+logger = structlog.get_logger(app_name="mimir", service=shared_config.service_name)
