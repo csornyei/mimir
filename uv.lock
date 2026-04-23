@@ -1392,6 +1392,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "asyncpg" },
     { name = "httpx" },
+    { name = "mcp" },
     { name = "opentelemetry-distro", extra = ["otlp"] },
     { name = "opentelemetry-instrumentation-httpx" },
     { name = "opentelemetry-instrumentation-logging" },
@@ -1410,7 +1411,6 @@ agent = [
     { name = "einops" },
     { name = "fastapi", extra = ["standard"] },
     { name = "lxml" },
-    { name = "mcp" },
     { name = "miniflux" },
     { name = "opentelemetry-instrumentation-fastapi" },
     { name = "opentelemetry-instrumentation-openai-v2" },
@@ -1433,7 +1433,6 @@ dev = [
 mcp = [
     { name = "caldav" },
     { name = "kr8s" },
-    { name = "mcp" },
     { name = "opentelemetry-instrumentation-starlette" },
 ]
 migrations = [
@@ -1448,6 +1447,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.13.5" },
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "mcp", specifier = ">=1.27.0" },
     { name = "opentelemetry-distro", extras = ["otlp"], specifier = ">=0.62b0" },
     { name = "opentelemetry-instrumentation-httpx", specifier = ">=0.62b0" },
     { name = "opentelemetry-instrumentation-logging", specifier = ">=0.62b0" },
@@ -1466,7 +1466,6 @@ agent = [
     { name = "einops", specifier = ">=0.8.2" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.135.3" },
     { name = "lxml", specifier = ">=6.0.2" },
-    { name = "mcp", specifier = ">=1.27.0" },
     { name = "miniflux", specifier = ">=1.1.6" },
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.62b0" },
     { name = "opentelemetry-instrumentation-openai-v2", specifier = ">=2.3b0" },
@@ -1489,7 +1488,6 @@ dev = [
 mcp = [
     { name = "caldav", specifier = ">=3.1.0" },
     { name = "kr8s", specifier = ">=0.20.15" },
-    { name = "mcp", specifier = ">=1.27.0" },
     { name = "opentelemetry-instrumentation-starlette", specifier = ">=0.62b0" },
 ]
 migrations = [{ name = "alembic", specifier = ">=1.18.4" }]

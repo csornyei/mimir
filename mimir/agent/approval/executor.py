@@ -1,4 +1,4 @@
-from mimir.agent.tools import tool_dispatcher
+from mimir.agent.dispatcher import tool_dispatcher
 from mimir.models import PendingActionModel
 from mimir.logger import logger
 

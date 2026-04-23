@@ -3,10 +3,13 @@ import json
 import re
 
 from httpx import AsyncClient, HTTPStatusError
+from opentelemetry import trace
 
 from mimir.agent.config import agent_config
 from mimir.logger import logger
 from mimir.llm.embedding import embedding_model
+
+_tracer = trace.get_tracer("mimir.llm")
 
 
 def _extract_tool_calls(content: str) -> list[dict]:
@@ -61,6 +64,22 @@ class LLMClient:
         max_tokens: int | None = None,
         fallbacks: list[list[dict]] | None = None,
     ) -> dict:
+        with _tracer.start_as_current_span("llm.complete") as span:
+            span.set_attribute("llm.model", agent_config.llm_model)
+            span.set_attribute("llm.tools_available", len(tools) if tools else 0)
+            return await self._complete(
+                span, messages, tools, temperature, max_tokens, fallbacks
+            )
+
+    async def _complete(
+        self,
+        span: trace.Span,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        fallbacks: list[list[dict]] | None = None,
+    ) -> dict:
         candidates = [messages] + (fallbacks or [])
         last_413: HTTPStatusError | None = None
 
@@ -107,6 +126,13 @@ class LLMClient:
                     estimated=not bool(usage),
                 )
 
+                span.set_attribute("llm.prompt_tokens", prompt_tokens or 0)
+                span.set_attribute("llm.completion_tokens", completion_tokens or 0)
+                span.set_attribute("llm.total_tokens", usage.get("total_tokens") or 0)
+                span.set_attribute("llm.tokens_estimated", not bool(usage))
+                if attempt > 0:
+                    span.set_attribute("llm.fallback_attempt", attempt)
+
                 choice = result["choices"][0]
                 message = choice.get("message", {})
                 finish_reason = choice.get("finish_reason", "stop")
@@ -117,10 +143,12 @@ class LLMClient:
                     and finish_reason == "tool_calls"
                     and message.get("tool_calls")
                 ):
-                    # Parser worked, return message with tool_calls
+                    tool_calls = message.get("tool_calls", [])
+                    span.set_attribute("llm.finish_reason", "tool_calls")
+                    span.set_attribute("llm.tool_calls_count", len(tool_calls))
                     return {
                         "content": message.get("content", ""),
-                        "tool_calls": message.get("tool_calls", []),
+                        "tool_calls": tool_calls,
                         "finish_reason": "tool_calls",
                     }
                 # Parser broken, try to extract from content
@@ -134,6 +162,9 @@ class LLMClient:
                         fallback="manual_extraction",
                     )
                     raw_calls = _extract_tool_calls(message.get("content", ""))
+                    span.set_attribute("llm.finish_reason", "tool_calls")
+                    span.set_attribute("llm.tool_calls_count", len(raw_calls))
+                    span.set_attribute("llm.tool_parser_fallback", True)
                     return {
                         "content": message.get("content", ""),
                         "tool_calls": raw_calls,
@@ -141,6 +172,7 @@ class LLMClient:
                     }
                 # No tool calls (normal response)
                 else:
+                    span.set_attribute("llm.finish_reason", "stop")
                     return {
                         "content": message.get("content", ""),
                         "tool_calls": [],
@@ -158,13 +190,16 @@ class LLMClient:
                     )
                     last_413 = e
                     continue
+                span.set_status(trace.StatusCode.ERROR, str(e))
                 logger.error("Error in LLMClient.complete", error=str(e))
                 raise
 
             except Exception as e:
+                span.set_status(trace.StatusCode.ERROR, str(e))
                 logger.error("Error in LLMClient.complete", error=str(e))
                 raise
 
+        span.set_status(trace.StatusCode.ERROR, "all payload fallbacks exhausted")
         logger.error(
             "All payload fallbacks exhausted",
             attempts=len(candidates),

@@ -17,6 +17,7 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy>=0.62b0",
     "opentelemetry-instrumentation-httpx>=0.62b0",
     "opentelemetry-instrumentation-logging>=0.62b0",
+    "mcp>=1.27.0",
 ]
 
 [dependency-groups]
@@ -26,7 +27,6 @@ agent = [
     "einops>=0.8.2",
     "fastapi[standard]>=0.135.3",
     "lxml>=6.0.2",
-    "mcp>=1.27.0",
     "miniflux>=1.1.6",
     "opentelemetry-instrumentation-fastapi>=0.62b0",
     "opentelemetry-instrumentation-openai-v2>=2.3b0",
@@ -40,7 +40,6 @@ agent = [
 mcp = [
     "caldav>=3.1.0",
     "kr8s>=0.20.15",
-    "mcp>=1.27.0",
     "opentelemetry-instrumentation-starlette>=0.62b0",
 ]
 

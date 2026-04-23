@@ -4,9 +4,12 @@ from typing import Any
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
+from opentelemetry import trace
 
 from mimir.agent.config import agent_config
 from mimir.logger import logger
+
+_tracer = trace.get_tracer("mimir.mcp_client")
 
 
 @asynccontextmanager
@@ -66,6 +69,11 @@ async def fetch_tools_openai_format() -> list[dict]:
 
 async def call_tool(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
     """Call a tool on the MCP server and return the result dict."""
-    async with _mcp_session() as session:
-        result = await session.call_tool(tool_name, args)
-        return _call_result_to_dict(result)
+    with _tracer.start_as_current_span(f"mcp.client.{tool_name}") as span:
+        span.set_attribute("mcp.tool.name", tool_name)
+        async with _mcp_session() as session:
+            result = await session.call_tool(tool_name, args)
+            parsed = _call_result_to_dict(result)
+            if parsed.get("isError"):
+                span.set_status(trace.StatusCode.ERROR)
+            return parsed

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.agent.tool_schema import tool_schema_registry
-from mimir.agent.tools import tool_dispatcher
+from mimir.agent.tools import tool_loop
 from mimir.db import get_db
 from mimir.logger import logger
 from mimir.agent.config import agent_config
@@ -146,7 +146,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     # --- Get final response (with or without tool loop) ---
     if tools:
-        final_response = await tool_dispatcher.run_tool_loop(
+        final_response = await tool_loop.run_tool_loop(
             messages=messages,
             tools=tools,
             max_steps=agent_config.tool_max_steps,
