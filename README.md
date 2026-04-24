@@ -1,8 +1,8 @@
 # Mimir
 
-A self-hosted, privacy-first personal AI assistant. All inference runs on hardware you own. No conversation data, personal context, or documents are sent to third-party LLM providers.
+Built as both a daily tool and a portfolio project, Mimir is an exercise in designing AI systems that are actually trustworthy: explicit memory you can read and edit, human-in-the-loop for all writes, and an observability stack that tells you exactly what happened and why.
 
-Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cpp, Ollama) and layers a full assistant stack on top: persistent conversations, three-tier memory, a RAG pipeline over your personal documents, and a Slack interface for natural interaction.
+Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cpp, Ollama) and layers a full assistant stack on top: persistent conversations, three-tier memory, a RAG pipeline over your personal documents, a Slack interface for natural interaction, and a tool-calling loop backed by an MCP server.
 
 ---
 
@@ -38,8 +38,16 @@ Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cp
 │                     │  │  Pipeline  │  │ Scheduler  │  │     │
 │  ┌─────────────┐    │  └────────────┘  └────────────┘  │     │
 │  │   Vault     │◄───│                                  │     │
-│  │  (docs/md)  │    └──────────────────────────────────┘     │
-│  └─────────────┘                                             │
+│  │  (docs/md)  │    └──────────────┬───────────────────┘     │
+│  └─────────────┘                   │ MCP client               │
+│                                    ▼                         │
+│                     ┌──────────────────────────────────┐     │
+│                     │  MCP Server (FastMCP)            │     │
+│                     │  • web_search (SearXNG)          │     │
+│                     │  • get_calendar_events (CalDAV)  │     │
+│                     │  • Kubernetes tools              │     │
+│                     │  • append_to_semantic_memory     │     │
+│                     └──────────────────────────────────┘     │
 └──────────────────────────────────────────────────────────────┘
                             │
               ┌─────────────┴─────────────┐
@@ -56,7 +64,8 @@ Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cp
 | **Conversation Manager** | Per-thread message history persisted to PostgreSQL                                 |
 | **Memory Orchestrator**  | Assembles the system prompt from semantic memory, episodic recall, and RAG context |
 | **RAG Pipeline**         | Chunks, embeds, and indexes documents; retrieves relevant context per query        |
-| **Proactive Scheduler**  | APScheduler jobs: episodic consolidation (running); morning briefs (planned)       |
+| **Proactive Scheduler**  | APScheduler jobs: episodic consolidation, morning brief, RSS digest                |
+| **MCP Server**           | FastMCP server exposing tools to the agent: search, calendar, Kubernetes, memory   |
 | **pgvector**             | Stores document chunk embeddings and episodic memory summaries                     |
 | **Slack Bot**            | Bolt for Python, Socket Mode. Translates Slack events to Agent Core API calls      |
 
@@ -66,14 +75,16 @@ Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cp
 
 - **Python 3.13** with [`uv`](https://github.com/astral-sh/uv) for dependency management
 - **FastAPI** — async API framework
+- **FastMCP** — MCP server framework
 - **PostgreSQL + pgvector** — conversation history, document embeddings, episodic memories
 - **SQLAlchemy (async) + Alembic** — ORM and schema migrations
-- **APScheduler** — background scheduling for episodic consolidation
+- **APScheduler** — background scheduling for episodic consolidation, morning brief, RSS digest
 - **Slack Bolt** — Socket Mode bot interface
 - **httpx** — async HTTP client for LLM backend communication
 - **watchdog** — filesystem event monitoring for automatic document ingestion
 - **nomic-embed-text-v1.5** — local embedding model (768 dimensions), runs entirely in-process
 - **structlog** — structured logging with console/JSON renderers
+- **kr8s** — async Kubernetes client
 
 ---
 
@@ -83,7 +94,7 @@ The following features are implemented and working.
 
 ### Three-Tier Memory Architecture
 
-Mimir's memory model is directly inspired by cognitive science — specifically Tulving's (1972) episodic/semantic taxonomy and Baddeley's (2000) working memory model.
+Mimir's memory model consists of the following three tiers:
 
 **Semantic memory** is a human-editable Markdown file (`vault/memory.md`) containing facts about you: preferences, projects, current situation. It is injected verbatim into every system prompt. If you edit it, the next message reflects the change instantly — no restart, no cache to clear. The source of truth for facts about you is a plain text file, not an opaque embedding database.
 
@@ -110,6 +121,37 @@ Indexes personal documents and retrieves relevant chunks per query.
 
 The system prompt is assembled under explicit token constraints. Each component has an independent cap: semantic memory, episodic context, and RAG context are all bounded and truncated at word boundaries rather than silently overrunning. The conversation window then fills whatever budget remains after the system prompt is assembled. When the LLM server returns HTTP 413 (payload too large), the client automatically retries with progressively stripped-down payloads: full context → no RAG/episodic → minimal system prompt with the last two messages only.
 
+### MCP Server & Tool Calling
+
+The agent runs a multi-step tool loop against an MCP server running as a separate process. The model requests tool calls; the agent core dispatches them; results feed back into the response — up to a configurable step limit.
+
+**Available tools:**
+
+| Tool                        | Description                                                            |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `web_search`                | Queries a self-hosted SearXNG instance; returns titles, URLs, snippets |
+| `get_calendar_events`       | Fetches events from a CalDAV server for a given date range             |
+| `list_pods`                 | Lists pods in a Kubernetes namespace                                   |
+| `list_deployments`          | Lists deployments in a Kubernetes namespace                            |
+| `list_services`             | Lists services in a Kubernetes namespace                               |
+| `list_namespaces`           | Lists all namespaces in the cluster                                    |
+| `list_nodes`                | Lists all nodes in the cluster                                         |
+| `get_pod_logs`              | Streams the last N lines from a pod                                    |
+| `describe_resource`         | Returns the full spec/status of any Kubernetes resource                |
+| `deploy_pod`                | Creates a new pod (write — requires approval)                          |
+| `append_to_semantic_memory` | Appends a timestamped fact to `memory.md` (write — requires approval)  |
+
+**Write tool approval:** Tools annotated with `@write_tool` set `destructiveHint=True` in their MCP schema. The agent core detects this flag and routes the call through the approval flow before executing. The tool schema cache refreshes every `MCP_SCHEMA_CACHE_TTL_SECONDS` seconds (default 300) so newly added tools appear without a restart.
+
+### Write Approval Flow
+
+Any tool marked as destructive triggers a Slack approval message before executing. State machine: `PENDING → APPROVED/REJECTED/DISCUSSING → COMPLETED`.
+
+- 10-minute auto-reject timeout for `PENDING` (configurable `APPROVAL_TIMEOUT_MINUTES`)
+- Discussion mode: the user can refine an action in-thread before approving
+- Configurable timeout for `DISCUSSING` state (`APPROVAL_DISCUSS_TIMEOUT_HOURS`; 0 = no timeout)
+- After approval, the MCP tool is re-invoked with the authorised `action_id`; the LLM is optionally re-invoked with the tool result (`APPROVAL_REINVOKE_LLM`)
+
 ### Slack Interface
 
 Runs as a separate process via Socket Mode — no public inbound webhook or open port required.
@@ -118,6 +160,18 @@ Runs as a separate process via Socket Mode — no public inbound webhook or open
 - Responds to `@mentions` in channels, always in-thread
 - Responds to thread replies in threads where Mimir has already participated
 - Per-thread conversation isolation (`thread_ts` as the conversation key)
+
+### Morning Briefing
+
+A daily job (APScheduler, configurable hour via `MORNING_BRIEF_HOUR`) fetches today's calendar events from CalDAV and asks the LLM to generate a structured briefing, which is posted to a configured Slack channel (`MORNING_BRIEF_CHANNEL_ID`).
+
+### RSS News Digest
+
+Four times a day (08:00, 12:00, 16:00, 20:00 UTC) the scheduler fetches unread articles from a self-hosted [Miniflux](https://miniflux.app/) instance, asks the LLM to pick the most relevant ones based on your semantic memory and past feedback, and posts the selection as a threaded Slack message to a dedicated "newspaper" channel (`NEWSPAPER_CHANNEL_ID`).
+
+- **LLM-based filtering:** the model scores articles against your `memory.md` profile and a rolling feedback summary so picks improve over time
+- **Four windows:** overnight (20→08), morning (08→12), midday (12→16), afternoon (16→20)
+- **Persistence:** each selected article is stored in `rss_digest_entries` for feedback tracking
 
 
 ---
@@ -131,6 +185,9 @@ Runs as a separate process via Socket Mode — no public inbound webhook or open
 - PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension
 - A running OpenAI-compatible inference server (MLX-LM, llama.cpp, Ollama, etc.)
 - A Slack app with Socket Mode enabled (for the bot interface)
+- (Optional) A self-hosted [SearXNG](https://searxng.github.io/searxng/) instance for web search
+- (Optional) A CalDAV server for calendar events and morning briefing
+- (Optional) A self-hosted [Miniflux](https://miniflux.app/) instance for the RSS digest
 
 ### Local Development
 
@@ -148,24 +205,7 @@ uv sync
 cp .env.example .env
 ```
 
-Edit `.env` with your settings. For all configurations, check `mimir/config.py`
-
-```env
-LLM_BASE_URL=http://localhost:8080   # your local inference server
-LLM_MODEL=your-model-identifier
-LLM_MAX_TOKENS=2048
-LLM_TEMPERATURE=0.7
-
-SEMANTIC_MEMORY_PATH=
-VAULT_PATH=
-
-DATABASE_URL=postgresql+asyncpg://mimir:mimir@localhost:5432/mimir
-
-AGENT_URL=http://127.0.0.1:8000
-
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_APP_TOKEN=xapp-...
-```
+Edit `.env` with your settings. See the Configuration Reference below for all variables. The MCP server reads from a separate `mcp.env` file (same variables for CalDAV, SearXNG, and the database).
 
 **3. Start the database**
 
@@ -187,13 +227,19 @@ uv run alembic upgrade head
 uv run fastapi dev mimir/main.py
 ```
 
-**6. Start the Slack bot** (separate terminal)
+**6. Start the MCP server** (separate terminal)
+
+```bash
+uv run python -m mimir.mcp.server
+```
+
+**7. Start the Slack bot** (separate terminal)
 
 ```bash
 uv run python -m mimir.interfaces.slack.bot
 ```
 
-**7. (Optional) Ingest documents**
+**8. (Optional) Ingest documents**
 
 Place Markdown or PDF files in `vault/` — the file watcher handles new and modified files automatically. For bulk ingestion of an existing collection:
 
@@ -201,9 +247,9 @@ Place Markdown or PDF files in `vault/` — the file watcher handles new and mod
 uv run python scripts/ingest.py --path ./vault
 ```
 
-### Docker Compose (Production)
+### Docker Compose
 
-The included `docker-compose.yml` runs the full stack: API server, Slack bot, and PostgreSQL with pgvector.
+The included `docker-compose.yml` runs the full stack: API server, MCP server, Slack bot, and PostgreSQL with pgvector.
 
 ```bash
 # Run migrations first
@@ -223,45 +269,102 @@ VAULT_PATH=/path/to/your/vault docker compose up -d
 
 ## Configuration Reference
 
-All settings are loaded from `.env` via Pydantic Settings.
+All settings are loaded from `.env` via Pydantic Settings. The MCP server reads from `mcp.env`.
 
-| Variable                          | Default                                                       | Description                                     |
-| --------------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
-| `LLM_BASE_URL`                    | `http://localhost:8080`                                       | OpenAI-compatible inference server              |
-| `API_KEY`                         | _(empty)_                                                     | Bearer token for the LLM server                 |
-| `LLM_MODEL`                       | `google/gemma-4-E2B-it`                                       | Model identifier                                |
-| `LLM_MAX_TOKENS`                  | `2048`                                                        | Max tokens per completion                       |
-| `LLM_TEMPERATURE`                 | `0.7`                                                         | Sampling temperature                            |
-| `LLM_CONTEXT_WINDOW`              | `8192`                                                        | Model context window size (tokens)              |
-| `EMBEDDING_MODEL`                 | `nomic-ai/nomic-embed-text-v1.5`                              | Local embedding model                           |
-| `EMBEDDING_DIMENSION`             | `768`                                                         | Embedding vector dimensions                     |
-| `SEMANTIC_MEMORY_PATH`            | `vault/memory.md`                                             | Path to the semantic memory file                |
-| `VAULT_PATH`                      | `vault`                                                       | Root directory watched for documents            |
-| `DATABASE_URL`                    | `postgresql+asyncpg://postgres:postgres@localhost:5432/mimir` | Async PostgreSQL connection string              |
-| `AGENT_URL`                       | `http://127.0.0.1:8000`                                       | Agent Core URL (used by the Slack bot)          |
-| `SLACK_BOT_TOKEN`                 | _(required)_                                                  | Slack bot OAuth token                           |
-| `SLACK_APP_TOKEN`                 | _(required)_                                                  | Slack app-level token (Socket Mode)             |
-| `EPISODIC_IDLE_MINUTES`           | `30`                                                          | Inactivity window before consolidation triggers |
-| `EPISODIC_RETRIEVAL_K`            | `3`                                                           | Episodic memories retrieved per query           |
-| `EPISODIC_NEW_MESSAGES_THRESHOLD` | `5`                                                           | Min new messages to trigger re-consolidation    |
-| `RAG_MAX_TOKENS`                  | `2000`                                                        | Token budget for injected RAG context           |
-| `EPISODIC_MAX_TOKENS`             | `600`                                                         | Token budget for injected episodic context      |
-| `SEMANTIC_MEMORY_MAX_TOKENS`      | `1500`                                                        | Token budget for injected semantic memory       |
-| `CONVERSATION_WINDOW_MIN`         | `2`                                                           | Minimum messages kept in context                |
-| `CONVERSATION_WINDOW_MAX`         | `20`                                                          | Maximum messages kept in context                |
-| `ENV`                             | `development`                                                 | Set to `production` for JSON logging            |
+### Core
+
+| Variable               | Default                                                       | Description                            |
+| ---------------------- | ------------------------------------------------------------- | -------------------------------------- |
+| `LLM_BASE_URL`         | `http://localhost:8080`                                       | OpenAI-compatible inference server     |
+| `API_KEY`              | _(empty)_                                                     | Bearer token for the LLM server        |
+| `LLM_MODEL`            | `google/gemma-4-E2B-it`                                       | Model identifier                       |
+| `LLM_MAX_TOKENS`       | `2048`                                                        | Max tokens per completion              |
+| `LLM_TEMPERATURE`      | `0.7`                                                         | Sampling temperature                   |
+| `LLM_CONTEXT_WINDOW`   | `8192`                                                        | Model context window size (tokens)     |
+| `EMBEDDING_MODEL`      | `nomic-ai/nomic-embed-text-v1.5`                              | Local embedding model                  |
+| `EMBEDDING_DIMENSION`  | `768`                                                         | Embedding vector dimensions            |
+| `SEMANTIC_MEMORY_PATH` | `vault/memory.md`                                             | Path to the semantic memory file       |
+| `VAULT_PATH`           | `vault`                                                       | Root directory watched for documents   |
+| `DATABASE_URL`         | `postgresql+asyncpg://postgres:postgres@localhost:5432/mimir` | Async PostgreSQL connection string     |
+| `AGENT_URL`            | `http://127.0.0.1:8000`                                       | Agent Core URL (used by the Slack bot) |
+| `ENV`                  | `development`                                                 | Set to `production` for JSON logging   |
+
+### Slack
+
+| Variable              | Default      | Description                                         |
+| --------------------- | ------------ | --------------------------------------------------- |
+| `SLACK_BOT_TOKEN`     | _(required)_ | Slack bot OAuth token                               |
+| `SLACK_APP_TOKEN`     | _(required)_ | Slack app-level token (Socket Mode)                 |
+| `SLACK_DM_CHANNEL_ID` | _(empty)_    | DM channel ID between bot and owner (for approvals) |
+| `SLACK_USER_ID`       | _(empty)_    | Owner's Slack user ID (used in morning brief)       |
+
+### Memory & Context
+
+| Variable                          | Default | Description                                     |
+| --------------------------------- | ------- | ----------------------------------------------- |
+| `EPISODIC_IDLE_MINUTES`           | `30`    | Inactivity window before consolidation triggers |
+| `EPISODIC_RETRIEVAL_K`            | `3`     | Episodic memories retrieved per query           |
+| `EPISODIC_NEW_MESSAGES_THRESHOLD` | `5`     | Min new messages to trigger re-consolidation    |
+| `RAG_MAX_TOKENS`                  | `2000`  | Token budget for injected RAG context           |
+| `EPISODIC_MAX_TOKENS`             | `600`   | Token budget for injected episodic context      |
+| `SEMANTIC_MEMORY_MAX_TOKENS`      | `1500`  | Token budget for injected semantic memory       |
+| `CONVERSATION_WINDOW_MIN`         | `2`     | Minimum messages kept in context                |
+| `CONVERSATION_WINDOW_MAX`         | `20`    | Maximum messages kept in context                |
+
+### Tool Calling & MCP
+
+| Variable                       | Default                 | Description                                       |
+| ------------------------------ | ----------------------- | ------------------------------------------------- |
+| `MCP_URL`                      | `http://localhost:8010` | MCP server base URL                               |
+| `MCP_SCHEMA_CACHE_TTL_SECONDS` | `300`                   | How long to cache tool schemas before re-fetching |
+| `TOOL_MAX_STEPS`               | `5`                     | Maximum tool-calling iterations per request       |
+| `TOOL_CALL_TIMEOUT_SECONDS`    | `30`                    | Timeout for a single tool call                    |
+
+### Approval Flow
+
+| Variable                         | Default | Description                                                         |
+| -------------------------------- | ------- | ------------------------------------------------------------------- |
+| `APPROVAL_TIMEOUT_MINUTES`       | `10`    | Minutes before a PENDING approval is auto-rejected (0 = no timeout) |
+| `APPROVAL_DISCUSS_TIMEOUT_HOURS` | `24`    | Hours before a DISCUSSING approval times out (0 = never)            |
+| `APPROVAL_REINVOKE_LLM`          | `true`  | Re-invoke the LLM with the tool result after approval               |
+
+### Integrations
+
+| Variable                   | Default  | Description                                           |
+| -------------------------- | -------- | ----------------------------------------------------- |
+| `CALDAV_URL`               | _(none)_ | CalDAV server URL (morning brief + calendar MCP tool) |
+| `CALDAV_USERNAME`          | _(none)_ | CalDAV username                                       |
+| `CALDAV_PASSWORD`          | _(none)_ | CalDAV password                                       |
+| `MORNING_BRIEF_CHANNEL_ID` | _(none)_ | Slack channel for the morning briefing                |
+| `MORNING_BRIEF_HOUR`       | `7`      | UTC hour to post the morning briefing                 |
+| `NEWSPAPER_CHANNEL_ID`     | _(none)_ | Slack channel for the RSS digest                      |
+| `MINIFLUX_URL`             | _(none)_ | Miniflux instance URL                                 |
+| `MINIFLUX_USERNAME`        | _(none)_ | Miniflux username                                     |
+| `MINIFLUX_PASSWORD`        | _(none)_ | Miniflux password                                     |
+| `RSS_DIGEST_MIN_ENTRIES`   | `10`     | Minimum articles before a digest window is posted     |
+| `RSS_DIGEST_PICKS`         | `10`     | Number of articles the LLM selects per digest         |
+
+### Observability
+
+| Variable                      | Default  | Description                                         |
+| ----------------------------- | -------- | --------------------------------------------------- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | _(none)_ | OTLP endpoint for trace export (e.g. Grafana Alloy) |
 
 ---
 
 ## API
 
-| Method | Path                      | Description                                    |
-| ------ | ------------------------- | ---------------------------------------------- |
-| `POST` | `/api/chat`               | Send a message; returns the assistant's reply  |
-| `GET`  | `/api/conversations`      | List all conversations, ordered by last active |
-| `GET`  | `/api/conversations/{id}` | Paginated message history for a conversation   |
-| `POST` | `/api/ingest`             | Upload a Markdown or PDF file for RAG indexing |
-| `GET`  | `/health`                 | Health check                                   |
+| Method  | Path                      | Description                                    |
+| ------- | ------------------------- | ---------------------------------------------- |
+| `POST`  | `/api/chat`               | Send a message; returns the assistant's reply  |
+| `GET`   | `/api/conversations`      | List all conversations, ordered by last active |
+| `GET`   | `/api/conversations/{id}` | Paginated message history for a conversation   |
+| `POST`  | `/api/ingest`             | Upload a Markdown or PDF file for RAG indexing |
+| `GET`   | `/api/approvals`          | List pending actions (filterable by Slack ts)  |
+| `GET`   | `/api/approvals/{id}`     | Get a specific pending action                  |
+| `POST`  | `/api/approvals`          | Create a pending action                        |
+| `PATCH` | `/api/approvals/{id}`     | Update a pending action's status               |
+| `GET`   | `/health`                 | Health check                                   |
 
 ---
 
@@ -311,29 +414,26 @@ uv run alembic upgrade head
 
 ## Roadmap
 
-The project is developed in phases. Current status: **Phase 2** (in progress).
+The project is developed in phases. Current status: **Phase 2 complete, Phase 3 starting**.
 
-### Phase 2 — Completed
+### Phase 2 — Complete
 
 - ✅ Slack bot — DMs, @mentions, thread replies, per-thread conversation isolation
 - ✅ Conversation persistence — PostgreSQL-backed, survives process restarts, Alembic migrations
 - ✅ RAG pipeline — Markdown and PDF ingestion, file watcher, upload endpoint, cosine retrieval
 - ✅ Episodic memory — automatic post-conversation summarisation, vector storage, retrieval, re-consolidation
 - ✅ Token budget management — per-component caps, dynamic conversation window, 413 fallback chain
-
-### Phase 2 — In Progress
-
-**MCP server + tool calling loop.** The model requests tool calls; the agent core dispatches them to an MCP server exposing homelab tools (Kubernetes, Grafana, Forgejo). The model proposes, the code executes, the result feeds back into the response.
-
-**Write approval flow.** Any tool that modifies state — or any proposed write to `memory.md` — triggers a Slack approval message before executing. The approval system is a state machine (`PENDING → APPROVED/REJECTED/DISCUSSING → COMPLETED`) backed by a `pending_actions` table, with a 10-minute auto-reject timeout, a discussion mode where the user can refine an action in thread, and an executor layer that dispatches to the correct backend.
-
-**Web search via SearXNG.** Self-hosted SearXNG on k3s, exposed as a standard MCP tool. Two-stage: snippet results for simple queries, full-page fetch + HTML stripping when the model decides snippets aren't enough. No external API keys.
-
-**Calendar integration.** CalDAV client injecting today's schedule and free blocks into the system prompt. Without this, the morning brief has no actual schedule to reference.
-
-**Proactive scheduler.** Daily morning brief posted to Slack DM. Weekly memory review where the model suggests updates to `memory.md` — posted as approval requests, never auto-written. _(The underlying APScheduler infrastructure is already running; episodic consolidation uses it. The morning brief and memory review jobs are not yet implemented.)_
+- ✅ MCP server + tool calling loop — multi-step loop, schema caching, write detection
+- ✅ Write approval flow — Slack-gated state machine, discussion mode, auto-timeout
+- ✅ Web search — SearXNG integration via MCP tool
+- ✅ Calendar integration — CalDAV client, MCP tool, injected into morning brief
+- ✅ Morning briefing — daily LLM-generated brief with today's calendar, posted to Slack
+- ✅ RSS news digest — Miniflux + LLM filtering, four digest windows per day, feedback loop
+- ✅ Kubernetes tools — read-only cluster inspection (pods, deployments, services, nodes, logs)
 
 ### Phase 3 — Planned: Intelligence & Measurement
+
+**Distributed tracing and quality tracking.** To answer basic operation questions (How often do tool calls fail? Is retrieval quality improving or degrading over time? Are the RAG chunks actually being used in responses?) the system requires observability. Using Grafana-OTel stack (Alloy, Tempo, Prometheus and Loki) will provide a deep understanding on how the system behaves and makes finding bugs and issues easier. Custom metric collection, user feedback for response quality, usage patterns, RAG retrieval and memory relevance heuristics, will help calibrating the different parameters and prompts for the agent.
 
 **Conversation-aware memory writes.** After each conversation ends, the consolidation job runs a second LLM pass to extract durable facts — life changes, new preferences, project decisions — and proposes them as additions to `memory.md` via the same Slack approval flow. This bridges the gap between episodic summaries (narratives) and semantic memory (actionable facts). The extraction prompt distinguishes between durable facts worth persisting and transient details that belong only in episodic summaries.
 
