@@ -13,7 +13,7 @@ if __name__ == "__main__":
     try:
         mcp.run(transport="streamable-http")
     except KeyboardInterrupt:
-        logger.info("MCP server stopped by user.")
+        logger.info("mcp_server_stopped_by_user")
         exit(0)
     except Exception as e:
         logger.error("mcp_server_error", error=str(e))

@@ -53,7 +53,7 @@ def write_tool(func):
             span.set_attribute("mcp.tool.name", func.__name__)
 
             if "action_id" not in kwargs:
-                logger.error("write_tool: missing action_id in kwargs")
+                logger.error("write_tool_missing_action_id", tool_name=func.__name__)
                 result = {"error": "Missing required parameter: action_id"}
                 span.set_status(trace.StatusCode.ERROR, result["error"])
                 return result
@@ -71,7 +71,7 @@ def write_tool(func):
             try:
                 action_uuid = UUID(action_id)
             except ValueError:
-                logger.error("write_tool: invalid action_id", action_id=action_id)
+                logger.error("write_tool_invalid_action_id", action_id=action_id)
                 result = {"error": f"Invalid action_id format: {action_id}"}
                 span.set_status(trace.StatusCode.ERROR, result["error"])
                 return result

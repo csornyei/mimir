@@ -99,7 +99,7 @@ class LLMClient:
                 response = await self._client.post("/v1/chat/completions", json=payload)
 
                 logger.debug(
-                    "Received response from LLM",
+                    "llm_response_received",
                     status_code=response.status_code,
                 )
 
@@ -118,17 +118,20 @@ class LLMClient:
                     len(m.get("content") or "") // 4 for m in msgs
                 )
                 completion_tokens = usage.get("completion_tokens")
+                total_tokens = usage.get("total_tokens") or (
+                    prompt_tokens + (completion_tokens or 0)
+                )
                 logger.info(
                     "llm_tokens",
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
-                    total_tokens=usage.get("total_tokens"),
+                    total_tokens=total_tokens,
                     estimated=not bool(usage),
                 )
 
                 span.set_attribute("llm.prompt_tokens", prompt_tokens or 0)
                 span.set_attribute("llm.completion_tokens", completion_tokens or 0)
-                span.set_attribute("llm.total_tokens", usage.get("total_tokens") or 0)
+                span.set_attribute("llm.total_tokens", total_tokens)
                 span.set_attribute("llm.tokens_estimated", not bool(usage))
                 if attempt > 0:
                     span.set_attribute("llm.fallback_attempt", attempt)
@@ -182,6 +185,8 @@ class LLMClient:
             except HTTPStatusError as e:
                 if e.response.status_code == 413:
                     estimated_tokens = sum(len(m.get("content", "")) // 4 for m in msgs)
+                    span.set_attribute("llm.payload_too_large", True)
+                    span.set_attribute("llm.payload_token_estimate", estimated_tokens)
                     logger.warning(
                         "llm_payload_too_large",
                         attempt=attempt,
@@ -191,17 +196,17 @@ class LLMClient:
                     last_413 = e
                     continue
                 span.set_status(trace.StatusCode.ERROR, str(e))
-                logger.error("Error in LLMClient.complete", error=str(e))
+                logger.error("llm_complete_error", error=str(e))
                 raise
 
             except Exception as e:
                 span.set_status(trace.StatusCode.ERROR, str(e))
-                logger.error("Error in LLMClient.complete", error=str(e))
+                logger.error("llm_complete_error", error=str(e))
                 raise
 
         span.set_status(trace.StatusCode.ERROR, "all payload fallbacks exhausted")
         logger.error(
-            "All payload fallbacks exhausted",
+            "llm_all_fallbacks_exhausted",
             attempts=len(candidates),
         )
         raise last_413 or Exception("All payload fallbacks exhausted")

@@ -1,23 +1,37 @@
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
+
 from mimir.agent.dispatcher import tool_dispatcher
 from mimir.models import PendingActionModel
 from mimir.logger import logger
 
+_tracer = trace.get_tracer("mimir.agent.approval.executor")
+
 
 async def execute(action: PendingActionModel) -> str:
     """Execute an approved action. Raises on failure — caller must catch and notify user."""
-    try:
-        logger.debug(
-            "execute: executing approved action", action=action.id, status=action.status
-        )
-        result = await _execute_tool_call(action.payload, action.id)
-        return result
-    except Exception as exc:
-        logger.error(
-            "approval_execution_failed",
-            action_id=str(action.id),
-            error=str(exc),
-        )
-        raise
+    with _tracer.start_as_current_span("approval.execute") as span:
+        span.set_attribute("approval.action_id", str(action.id))
+        tool_name = action.payload.get("tool_name", "unknown")
+        span.set_attribute("approval.tool_name", tool_name)
+        try:
+            logger.debug(
+                "approval_execution_started",
+                action_id=str(action.id),
+                status=str(action.status),
+            )
+            result = await _execute_tool_call(action.payload, action.id)
+            span.set_attribute("approval.outcome", "executed")
+            return result
+        except Exception as exc:
+            logger.error(
+                "approval_execution_failed",
+                action_id=str(action.id),
+                error=str(exc),
+            )
+            span.set_status(StatusCode.ERROR, str(exc))
+            span.set_attribute("approval.outcome", "failed")
+            raise
 
 
 async def _execute_tool_call(payload: dict, action_id) -> str:

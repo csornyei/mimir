@@ -239,7 +239,7 @@ async def handle_message(event: dict, say: Any, client: Any) -> None:
 
 async def start():
     logger.debug("configuring_slack_bot", config=slack_config.model_dump())
-    logger.info("Starting Slack bot")
+    logger.info("starting_slack_bot")
     initialize_db(slack_config.database_url)
     handler = AsyncSocketModeHandler(app, slack_config.slack_app_token)
     await handler.start_async()

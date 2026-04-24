@@ -54,7 +54,7 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
     )
     row = existing.scalar_one_or_none()
     if row == content_hash:
-        logger.debug("File unchanged, skipping ingestion", path=source_path)
+        logger.debug("vault_file_unchanged", path=source_path)
         return 0
 
     # Remove stale chunks before re-ingesting
@@ -62,7 +62,7 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
         await session.execute(
             delete(DocumentChunk).where(DocumentChunk.source_path == source_path)
         )
-        logger.debug("Deleted stale chunks", path=source_path)
+        logger.debug("vault_file_stale_chunks_deleted", path=source_path)
 
     # Chunk the file
     if suffix == ".md":
@@ -75,7 +75,7 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
         source_type = "pdf"
 
     if not raw_chunks:
-        logger.warning("No chunks produced", path=source_path)
+        logger.warning("vault_file_no_chunks_produced", path=source_path)
         return 0
 
     # Embed all chunks in a single batch call, offloaded to a thread
@@ -98,6 +98,9 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
     inserted = len(raw_chunks)
 
     logger.info(
-        "Ingested file", path=source_path, chunks=inserted, source_type=source_type
+        "vault_file_ingested",
+        path=source_path,
+        chunks=inserted,
+        source_type=source_type,
     )
     return inserted
