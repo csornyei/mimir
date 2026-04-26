@@ -9,6 +9,9 @@ class AgentConfig(SharedConfig):
     llm_max_tokens: int = 2048
     llm_temperature: float = 0.7
 
+    embedding_url: str = "http://localhost:8081/v1/embeddings"
+    embedding_model: str = "nomic-ai/nomic-embed-text-v2-moe"
+
     llm_context_window: int = 8192
     conversation_window_min: int = 2
     conversation_window_max: int = 20

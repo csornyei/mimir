@@ -40,6 +40,7 @@ class ToolLoop(ToolDispatcher):
             steps_taken = 0
             tool_calls_total = 0
             approval_requested = False
+            seen_call_signatures: set[frozenset] = set()
 
             for step in range(max_steps):
                 steps_taken = step + 1
@@ -47,7 +48,6 @@ class ToolLoop(ToolDispatcher):
 
                 response = await llm_client.complete(messages=messages, tools=tools)
 
-                finish_reason = response.get("finish_reason", "stop")
                 content = response.get("content", "")
                 tool_calls = response.get("tool_calls", [])
 
@@ -59,7 +59,7 @@ class ToolLoop(ToolDispatcher):
                     assistant_msg["tool_calls"] = tool_calls
                 messages.append(assistant_msg)
 
-                if not tool_calls or finish_reason == "stop":
+                if not tool_calls:
                     logger.debug("tool_loop_final_response", step=steps_taken)
                     span.set_attribute("tool_loop.steps_taken", steps_taken)
                     span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
@@ -68,6 +68,29 @@ class ToolLoop(ToolDispatcher):
                     )
                     span.set_attribute("tool_loop.termination_reason", "stop")
                     return content
+
+                # Detect model stuck in a loop (same calls, same args as a prior step)
+                call_sig = frozenset(
+                    (
+                        tc.get("function", {}).get("name") or tc.get("name"),
+                        tc.get("function", {}).get("arguments") or tc.get("arguments"),
+                    )
+                    for tc in tool_calls
+                )
+                if call_sig in seen_call_signatures:
+                    logger.warning(
+                        "tool_loop_duplicate_calls_detected",
+                        step=steps_taken,
+                        calls=list(call_sig),
+                    )
+                    span.set_attribute("tool_loop.steps_taken", steps_taken)
+                    span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
+                    span.set_attribute(
+                        "tool_loop.termination_reason", "duplicate_calls"
+                    )
+                    span.set_status(StatusCode.ERROR, "duplicate_calls")
+                    return content
+                seen_call_signatures.add(call_sig)
 
                 tool_results = []
                 for tc in tool_calls:
@@ -99,12 +122,11 @@ class ToolLoop(ToolDispatcher):
                         result = await self.dispatch(tool_name, args)
 
                     tool_calls_total += 1
+
                     tool_results.append(
                         {
-                            "role": "tool",
-                            "tool_call_id": tc.get("id", ""),
-                            "name": tool_name,
-                            "content": json.dumps(result),
+                            "role": "user",
+                            "content": f"Tool result for `{tool_name}`:\n{json.dumps(result)}",
                         }
                     )
 

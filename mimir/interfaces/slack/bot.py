@@ -84,7 +84,9 @@ async def _agent_reply(
             user_id=user_id,
             message=message,
         )
+
         duration_ms = (time.monotonic() - start_time) * 1000
+
         logger.info(
             "agent_reply_sent",
             conversation_id=conversation_id,

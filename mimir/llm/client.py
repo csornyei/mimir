@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 
@@ -98,14 +97,14 @@ class LLMClient:
 
                 response = await self._client.post("/v1/chat/completions", json=payload)
 
-                logger.debug(
-                    "llm_response_received",
-                    status_code=response.status_code,
-                )
-
                 response.raise_for_status()
 
                 result = response.json()
+
+                logger.debug(
+                    "llm_response_content",
+                    content=result,
+                )
                 if "choices" not in result or len(result["choices"]) == 0:
                     return {
                         "content": '{"error": "No choices returned from LLM"}',
@@ -140,12 +139,7 @@ class LLMClient:
                 message = choice.get("message", {})
                 finish_reason = choice.get("finish_reason", "stop")
 
-                # Check if runtime parser worked (only relevant if tools provided)
-                if (
-                    tools
-                    and finish_reason == "tool_calls"
-                    and message.get("tool_calls")
-                ):
+                if tools and message.get("tool_calls"):
                     tool_calls = message.get("tool_calls", [])
                     span.set_attribute("llm.finish_reason", "tool_calls")
                     span.set_attribute("llm.tool_calls_count", len(tool_calls))
@@ -212,10 +206,20 @@ class LLMClient:
         raise last_413 or Exception("All payload fallbacks exhausted")
 
     async def embed(self, input: str) -> list[float]:
-        return await asyncio.to_thread(embedding_model.embed, input)
+        try:
+            embed_result = await embedding_model.embed_query(input)
+            return embed_result
+        except Exception as e:
+            logger.error("embedding_failed", error=str(e))
+            raise e
 
     async def embed_batch(self, inputs: list[str]) -> list[list[float]]:
-        return await asyncio.to_thread(embedding_model.embed_batch, inputs)
+        try:
+            embed_results = await embedding_model.embed_document(inputs)
+            return embed_results
+        except Exception as e:
+            logger.error("batch_embedding_failed", error=str(e))
+            raise e
 
     async def close(self):
         await self._client.aclose()

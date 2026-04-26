@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from mimir.llm.client import llm_client
 from mimir.models import ConversationModel, EpisodicMemoryModel, MessageModel
 from mimir.agent.config import agent_config
+from mimir.logger import logger
 
 _CONSOLIDATION_MIN_MESSAGES = 5
 _RETRIEVAL_THRESHOLD = 0.6
@@ -119,33 +120,40 @@ class EpisodicMemory:
         Only memories with cosine similarity > _RETRIEVAL_THRESHOLD are returned.
         Each result: {summary, started_at, ended_at, score}.
         """
-        query_embedding = await llm_client.embed(query)
+        try:
+            query_embedding = await llm_client.embed(query)
 
-        score_expr = (
-            1 - EpisodicMemoryModel.embedding.cosine_distance(query_embedding)
-        ).label("score")
+            score_expr = (
+                1 - EpisodicMemoryModel.embedding.cosine_distance(query_embedding)
+            ).label("score")
 
-        result = await self._session.execute(
-            select(
-                EpisodicMemoryModel.summary,
-                EpisodicMemoryModel.started_at,
-                EpisodicMemoryModel.ended_at,
-                score_expr,
+            result = await self._session.execute(
+                select(
+                    EpisodicMemoryModel.summary,
+                    EpisodicMemoryModel.started_at,
+                    EpisodicMemoryModel.ended_at,
+                    score_expr,
+                )
+                .where(
+                    (1 - EpisodicMemoryModel.embedding.cosine_distance(query_embedding))
+                    > _RETRIEVAL_THRESHOLD
+                )
+                .order_by(
+                    EpisodicMemoryModel.embedding.cosine_distance(query_embedding)
+                )
+                .limit(k)
             )
-            .where(
-                (1 - EpisodicMemoryModel.embedding.cosine_distance(query_embedding))
-                > _RETRIEVAL_THRESHOLD
-            )
-            .order_by(EpisodicMemoryModel.embedding.cosine_distance(query_embedding))
-            .limit(k)
-        )
 
-        return [
-            {
-                "summary": row.summary,
-                "started_at": row.started_at,
-                "ended_at": row.ended_at,
-                "score": row.score,
-            }
-            for row in result
-        ]
+            return [
+                {
+                    "summary": row.summary,
+                    "started_at": row.started_at,
+                    "ended_at": row.ended_at,
+                    "score": row.score,
+                }
+                for row in result
+            ]
+        except Exception as e:
+            # Log and re-raise so caller can handle (e.g. skip episodic retrieval, increment retries).
+            logger.error("episodic_retrieval_failed", error=str(e))
+            raise e

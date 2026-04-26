@@ -24,7 +24,7 @@ services:
       ENV: production
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
       SERVICE_NAME: agent_core
-      LLM_BASE_URL: http://host.docker.internal:8080
+      # LLM_BASE_URL: http://host.docker.internal:8080
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
     extra_hosts:
       - "host.docker.internal:host-gateway"
