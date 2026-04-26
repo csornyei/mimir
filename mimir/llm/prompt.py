@@ -27,7 +27,7 @@ If the context doesn't contain the answer, say "I don't see this in your notes."
 ## Capabilities
 - You can answer questions, help with technical problems, and reason through decisions.
 - You have access to tools to query {owner}'s homelab. Use them when relevant.
-- For any action that modifies state (write, delete, deploy), you MUST present it for approval first.
+- For any action that modifies state (write, delete, deploy), call the tool directly — the system handles approval automatically.
 - You have a context window of {context_window} tokens. Be concise when the situation allows.
 
 {tool_instructions}
@@ -88,24 +88,44 @@ def build_tool_instructions(tools: list[dict] | None = None) -> str:
 You currently have no tools available for this conversation. Answer based on your knowledge and memory only.
 Do not make up tool results. If you don't have the data, say so."""
 
-    tool_names = []
+    read_tools = []
+    write_tools = []
     for tool in tools:
-        # OpenAI format: tool.function.name
         if "function" in tool:
-            tool_names.append(tool["function"]["name"])
+            name = tool["function"]["name"]
         elif "name" in tool:
-            tool_names.append(tool["name"])
+            name = tool["name"]
+        else:
+            continue
+        if tool.get("destructive", False):
+            write_tools.append(name)
+        else:
+            read_tools.append(name)
 
-    tools_list = ", ".join(sorted(tool_names))
+    sections = []
+    if read_tools:
+        sections.append(f"Read tools: {', '.join(sorted(read_tools))}")
+    if write_tools:
+        sections.append(
+            f"Write tools (require approval): {', '.join(sorted(write_tools))}"
+        )
+    tools_list = "\n".join(sections)
+
+    write_note = (
+        "\n- Write tools trigger an automatic approval flow — call them directly and the system will pause for user confirmation."
+        if write_tools
+        else ""
+    )
 
     return f"""## Tool Capabilities
 
-You have access to the following tools: {tools_list}
+You have access to the following tools:
+{tools_list}
 
 - Always call the most relevant tool before answering questions.
 - If a tool returns an error, acknowledge it clearly and try an alternative approach.
 - Do not make up tool results. If you don't have the data, say so.
-- Call all necessary tools before giving your final answer."""
+- Call all necessary tools before giving your final answer.{write_note}"""
 
 
 def build_system_prompt(
