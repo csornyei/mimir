@@ -86,7 +86,11 @@ async def consolidate_idle_threads() -> None:
                             logger.debug("consolidated_thread", thread_id=thread_id)
                     except Exception as e:
                         logger.error(
-                            "consolidation_failed", thread_id=thread_id, error=str(e)
+                            "consolidation_failed",
+                            thread_id=thread_id,
+                            error=str(e),
+                            error_type=type(e).__name__,
+                            exc_info=True,
                         )
                         await session.execute(
                             update(ConversationModel)

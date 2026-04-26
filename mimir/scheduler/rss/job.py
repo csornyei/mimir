@@ -103,4 +103,10 @@ async def run_digest(
         )
 
     except Exception as e:
-        logger.error("rss_digest_failed", window=window_label, error=str(e))
+        logger.error(
+            "rss_digest_failed",
+            window=window_label,
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )

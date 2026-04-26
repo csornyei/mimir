@@ -155,5 +155,10 @@ class EpisodicMemory:
             ]
         except Exception as e:
             # Log and re-raise so caller can handle (e.g. skip episodic retrieval, increment retries).
-            logger.error("episodic_retrieval_failed", error=str(e))
+            logger.error(
+                "episodic_retrieval_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
             raise e
