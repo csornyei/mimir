@@ -98,8 +98,9 @@ def write_tool(func):
 
                 if action is None:
                     logger.warning(
-                        "write_tool: no approved action found",
+                        "write_tool_no_approved_action",
                         action_id=action_id,
+                        tool_name=func.__name__,
                     )
                     result = {"error": f"No approved action found with id {action_id}."}
                     span.set_status(trace.StatusCode.ERROR, result["error"])
@@ -108,16 +109,20 @@ def write_tool(func):
                 try:
                     tool_result = await func(*args, **kwargs)
                     logger.debug(
-                        "write_tool: tool execution succeeded",
+                        "write_tool_execution_succeeded",
                         action_id=action_id,
+                        tool_name=func.__name__,
                     )
                     if isinstance(tool_result, dict) and tool_result.get("error"):
                         span.set_status(trace.StatusCode.ERROR, tool_result["error"])
                 except Exception as e:
                     logger.error(
-                        "write_tool: tool execution failed",
+                        "write_tool_execution_failed",
                         action_id=action_id,
+                        tool_name=func.__name__,
                         error=str(e),
+                        error_type=type(e).__name__,
+                        exc_info=True,
                     )
                     span.set_status(trace.StatusCode.ERROR, str(e))
                     return {"error": f"Tool execution failed: {e}"}

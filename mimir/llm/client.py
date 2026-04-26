@@ -157,6 +157,7 @@ class LLMClient:
                     logger.warning(
                         "runtime_tool_parser_broken",
                         fallback="manual_extraction",
+                        content_preview=message.get("content", "")[:120],
                     )
                     raw_calls = _extract_tool_calls(message.get("content", ""))
                     span.set_attribute("llm.finish_reason", "tool_calls")
@@ -190,18 +191,30 @@ class LLMClient:
                     last_413 = e
                     continue
                 span.set_status(trace.StatusCode.ERROR, str(e))
-                logger.error("llm_complete_error", error=str(e))
+                logger.error(
+                    "llm_complete_error",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    status_code=e.response.status_code,
+                    exc_info=True,
+                )
                 raise
 
             except Exception as e:
                 span.set_status(trace.StatusCode.ERROR, str(e))
-                logger.error("llm_complete_error", error=str(e))
+                logger.error(
+                    "llm_complete_error",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    exc_info=True,
+                )
                 raise
 
         span.set_status(trace.StatusCode.ERROR, "all payload fallbacks exhausted")
         logger.error(
             "llm_all_fallbacks_exhausted",
             attempts=len(candidates),
+            last_error=str(last_413),
         )
         raise last_413 or Exception("All payload fallbacks exhausted")
 
@@ -210,7 +223,12 @@ class LLMClient:
             embed_result = await embedding_model.embed_query(input)
             return embed_result
         except Exception as e:
-            logger.error("embedding_failed", error=str(e))
+            logger.error(
+                "embedding_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
             raise e
 
     async def embed_batch(self, inputs: list[str]) -> list[list[float]]:
@@ -218,7 +236,12 @@ class LLMClient:
             embed_results = await embedding_model.embed_document(inputs)
             return embed_results
         except Exception as e:
-            logger.error("batch_embedding_failed", error=str(e))
+            logger.error(
+                "batch_embedding_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
             raise e
 
     async def close(self):

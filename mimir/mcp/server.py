@@ -16,4 +16,6 @@ if __name__ == "__main__":
         logger.info("mcp_server_stopped_by_user")
         exit(0)
     except Exception as e:
-        logger.error("mcp_server_error", error=str(e))
+        logger.error(
+            "mcp_server_error", error=str(e), error_type=type(e).__name__, exc_info=True
+        )

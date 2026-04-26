@@ -34,7 +34,10 @@ class EmbeddingModel:
             if not data or not isinstance(data, list) or "embedding" not in data[0]:
                 logger.error(
                     "embedding_response_malformed",
-                    response_body=resp_body,
+                    response_keys=list(resp_body.keys())
+                    if isinstance(resp_body, dict)
+                    else type(resp_body).__name__,
+                    data_length=len(data),
                 )
                 raise ValueError("Malformed embedding response")
 
@@ -44,19 +47,23 @@ class EmbeddingModel:
             ):
                 logger.error(
                     "embedding_response_invalid_embedding",
-                    embedding=embedding,
+                    embedding_type=type(embedding).__name__,
+                    embedding_preview=str(embedding)[:80],
                 )
                 raise ValueError("Invalid embedding format")
 
             return embedding
+        except ValueError:
+            raise
         except Exception as e:
             logger.error(
-                "response_error",
-                status_code=getattr(e, "response", {}).get("status_code"),
+                "embedding_query_failed",
                 error=str(e),
+                error_type=type(e).__name__,
+                status_code=getattr(getattr(e, "response", None), "status_code", None),
+                exc_info=True,
             )
-            logger.error("embedding_query_failed", error=str(e))
-            raise e
+            raise
 
     async def embed_document(self, documents: list[str]) -> list[list[float]]:
         try:
@@ -76,7 +83,11 @@ class EmbeddingModel:
             if not data or not isinstance(data, list) or "embedding" not in data[0]:
                 logger.error(
                     "embedding_response_malformed",
-                    response_body=resp_body,
+                    response_keys=list(resp_body.keys())
+                    if isinstance(resp_body, dict)
+                    else type(resp_body).__name__,
+                    data_length=len(data),
+                    document_count=len(documents),
                 )
                 raise ValueError("Malformed embedding response")
 
@@ -89,14 +100,24 @@ class EmbeddingModel:
                 ):
                     logger.warning(
                         "embedding_response_invalid_embedding",
-                        embedding=embedding,
+                        embedding_type=type(embedding).__name__,
+                        embedding_preview=str(embedding)[:80],
                     )
                 embeddings.append(embedding)
 
             return embeddings
+        except ValueError:
+            raise
         except Exception as e:
-            logger.error("embedding_document_failed", error=str(e))
-            raise e
+            logger.error(
+                "embedding_document_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                status_code=getattr(getattr(e, "response", None), "status_code", None),
+                document_count=len(documents),
+                exc_info=True,
+            )
+            raise
 
 
 embedding_model = EmbeddingModel()

@@ -129,7 +129,14 @@ async def _handle_approve(
             thread_ts=action.message_ts,
             text=f"⚠️ Execution failed: {e!s}",
         )
-        logger.error("approval_execution_error", action_id=str(action.id), error=str(e))
+        logger.error(
+            "approval_execution_error",
+            action_id=str(action.id),
+            tool_name=action.payload.get("tool_name", "unknown"),
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
         return
 
     if agent_config.approval_reinvoke_llm:
@@ -148,7 +155,11 @@ async def _handle_approve(
             )
         except Exception as e:
             logger.error(
-                "approval_reinvoke_failed", action_id=str(action.id), error=str(e)
+                "approval_reinvoke_failed",
+                action_id=str(action.id),
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
             )
 
 
@@ -210,6 +221,8 @@ async def handle_thread_reply(
             "approval_discuss_failed",
             action_id=str(action.id),
             error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
         )
         await say(
             text="Sorry, something went wrong while processing your reply.",
@@ -244,6 +257,8 @@ async def process_timeouts(session: AsyncSession) -> None:
                 "approval_timeout_notify_failed",
                 action_id=str(action.id),
                 error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
             )
     if actions:
         logger.debug("approval_timeouts_processed", count=len(actions))
