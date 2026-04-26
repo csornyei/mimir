@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check:
+    name: Pre-commit and Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18-trixie
+        env:
+          POSTGRES_USER: mimir
+          POSTGRES_PASSWORD: mimir
+          POSTGRES_DB: mimir
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@localhost:5432/mimir
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run pre-commit checks
+        run: uv run pre-commit run --all-files
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        run: uv run pytest
