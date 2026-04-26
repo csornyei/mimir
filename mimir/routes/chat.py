@@ -68,15 +68,15 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                     if rag_tokens_used + chunk_tokens > agent_config.rag_max_tokens:
                         logger.warning(
                             "rag_chunk_dropped",
-                            score=metadata.get("score"),
+                            score=round(metadata.get("score", 0), 4),
                             reason="rag_budget_exceeded",
                         )
                         continue
-                    logger.debug(
-                        "rag_chunk_retrieved",
-                        score=round(metadata.get("score", 0), 4),
-                        **metadata,
-                    )
+                    log_meta = {
+                        **{k: v for k, v in metadata.items() if k != "score"},
+                        "score": round(metadata.get("score", 0), 4),
+                    }
+                    logger.debug("rag_chunk_retrieved", **log_meta)
                     source = metadata.get("file_name", "")
                     header = metadata.get("header", "")
                     page = metadata.get("page", "")
@@ -91,7 +91,13 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 rag_span.set_attribute("rag.chunks_found", rag_chunks_found)
                 rag_span.set_attribute("rag.tokens_used", rag_tokens_used)
             except Exception as e:
-                logger.error("rag_retrieval_failed", error=str(e))
+                logger.error(
+                    "rag_retrieval_failed",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    query_length=len(request.message),
+                    exc_info=True,
+                )
                 rag_span.set_status(StatusCode.ERROR, str(e))
                 rag_context = "Error while retrieving relevant information."
 
@@ -106,7 +112,13 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
                 ep_span.set_attribute("episodic.memories_found", len(episodic_memories))
                 logger.debug("episodic_retrieval", count=len(episodic_memories))
             except Exception as e:
-                logger.error("episodic_retrieval_failed", error=str(e))
+                logger.error(
+                    "episodic_retrieval_failed",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    query_length=len(request.message),
+                    exc_info=True,
+                )
                 ep_span.set_status(StatusCode.ERROR, str(e))
                 episodic_context = ""
 

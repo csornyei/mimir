@@ -101,6 +101,8 @@ async def _agent_reply(
             conversation_id=conversation_id,
             user_id=user_id,
             error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
         )
         await say(
             text="Sorry, something went wrong.",
@@ -117,7 +119,14 @@ async def handle_reaction_added(event: dict, client: Any) -> None:
     try:
         await rss_feedback.on_digest_reaction(event, client)
     except Exception as e:
-        logger.error("rss_feedback_reaction_failed", error=str(e))
+        logger.error(
+            "rss_feedback_reaction_failed",
+            emoji=event.get("reaction"),
+            message_ts=event.get("item", {}).get("ts"),
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
 
 
 @app.event("app_mention")

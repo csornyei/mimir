@@ -8,7 +8,6 @@ from structlog.processors import (
     CallsiteParameterAdder,
     CallsiteParameter,
 )
-from structlog.dev import ConsoleRenderer
 
 from opentelemetry import trace
 
@@ -24,10 +23,9 @@ def add_trace_context(logger, method_name, event_dict):
     return event_dict
 
 
-renderer = JSONRenderer() if shared_config.env == "production" else ConsoleRenderer()
-
 structlog.configure(
     cache_logger_on_first_use=True,
+    wrapper_class=structlog.make_filtering_bound_logger(shared_config.log_level),
     processors=[
         add_trace_context,
         TimeStamper(fmt="iso"),
@@ -41,7 +39,7 @@ structlog.configure(
                 CallsiteParameter.LINENO,
             ]
         ),
-        renderer,
+        JSONRenderer(),
     ],
 )
 

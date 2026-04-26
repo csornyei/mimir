@@ -63,7 +63,9 @@ def _parse_picks(content: str) -> list[dict[str, Any]]:
                 return result
         except json.JSONDecodeError:
             pass
-    logger.warning("rss_filter_parse_failed", preview=content[:200])
+    logger.warning(
+        "rss_filter_parse_failed", preview=content[:200], content_length=len(content)
+    )
     return []
 
 

@@ -58,4 +58,9 @@ async def run_morning_briefing() -> None:
         )
 
     except Exception as e:
-        logger.error("morning_briefing_failed", error=str(e))
+        logger.error(
+            "morning_briefing_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )

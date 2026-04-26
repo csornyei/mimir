@@ -6,6 +6,8 @@ class SharedConfig(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
+    log_level: str = "INFO"
+
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mimir"
     semantic_memory_path: str = "vault/memory.md"
 

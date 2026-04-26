@@ -179,7 +179,11 @@ class ToolLoop(ToolDispatcher):
             }
         except Exception as e:
             logger.error(
-                "write_tool_approval_failed", tool_name=tool_name, error=str(e)
+                "write_tool_approval_failed",
+                tool_name=tool_name,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
             )
             return {"error": f"Failed to request approval: {e}"}
 

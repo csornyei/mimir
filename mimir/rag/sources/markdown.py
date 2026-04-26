@@ -48,7 +48,7 @@ def _extract_frontmatter(text: str) -> tuple[dict, str]:
     try:
         frontmatter = yaml.safe_load(frontmatter_str) or {}
     except yaml.YAMLError as e:
-        logger.warning("markdown_frontmatter_parse_failed", error=str(e))
+        logger.warning("markdown_frontmatter_parse_failed", error=str(e), exc_info=True)
         frontmatter = {}
 
     text_without_frontmatter = text[match.end() :].strip()

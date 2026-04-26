@@ -36,7 +36,13 @@ class _VaultEventHandler(FileSystemEventHandler):
                 await session.commit()
             logger.info("vault_file_ingestion_complete", path=str(path), chunks=n)
         except Exception as e:
-            logger.error("vault_file_ingestion_failed", path=str(path), error=str(e))
+            logger.error(
+                "vault_file_ingestion_failed",
+                path=str(path),
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
 
     def on_created(self, event: FileCreatedEvent | DirCreatedEvent) -> None:
         if not event.is_directory:

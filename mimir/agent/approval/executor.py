@@ -27,7 +27,10 @@ async def execute(action: PendingActionModel) -> str:
             logger.error(
                 "approval_execution_failed",
                 action_id=str(action.id),
+                tool_name=tool_name,
                 error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
             )
             span.set_status(StatusCode.ERROR, str(exc))
             span.set_attribute("approval.outcome", "failed")
