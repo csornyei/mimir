@@ -25,18 +25,9 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@localhost:5432/mimir
-      EMBEDDING_URL: ${{ secrets.EMBEDDING_URL }}
-      EMBEDDING_MODEL: nomic-ai/nomic-embed-text-v2-moe
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v3
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:github-ci
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5

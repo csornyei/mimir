@@ -272,23 +272,23 @@ async def test_complete_fallback_uses_correct_messages(mocker):
 
 async def test_embed_delegates_to_embedding_model(mocker):
     mock_em = mocker.patch("mimir.llm.client.embedding_model")
-    mock_em.embed.return_value = [0.1, 0.2, 0.3]
+    mock_em.embed_query = AsyncMock(return_value=[0.1, 0.2, 0.3])
     http = AsyncMock()
     client = _make_client(http)
 
     result = await client.embed("hello")
 
-    mock_em.embed.assert_called_once_with("hello")
+    mock_em.embed_query.assert_called_once_with("hello")
     assert result == [0.1, 0.2, 0.3]
 
 
 async def test_embed_batch_delegates_to_embedding_model(mocker):
     mock_em = mocker.patch("mimir.llm.client.embedding_model")
-    mock_em.embed_batch.return_value = [[0.1, 0.2], [0.3, 0.4]]
+    mock_em.embed_document = AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]])
     http = AsyncMock()
     client = _make_client(http)
 
     result = await client.embed_batch(["hello", "world"])
 
-    mock_em.embed_batch.assert_called_once_with(["hello", "world"])
+    mock_em.embed_document.assert_called_once_with(["hello", "world"])
     assert result == [[0.1, 0.2], [0.3, 0.4]]

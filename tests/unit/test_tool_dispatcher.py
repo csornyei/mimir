@@ -144,7 +144,13 @@ async def test_write_tool_injects_approval_pending_result(mocker):
         )
 
     second_call_messages = captured_messages[1]
-    tool_result_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+    tool_result_msgs = [
+        m
+        for m in second_call_messages
+        if m.get("role") == "user"
+        and m.get("content", "").startswith("Tool result for")
+    ]
     assert len(tool_result_msgs) == 1
-    content = json.loads(tool_result_msgs[0]["content"])
+    raw = tool_result_msgs[0]["content"].split("\n", 1)[1]
+    content = json.loads(raw)
     assert content["status"] == "approval_requested"
