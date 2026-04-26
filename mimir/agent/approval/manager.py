@@ -2,17 +2,22 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 from slack_sdk.web.async_client import AsyncWebClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.agent.approval import executor, store
 from mimir.models import ActionStatus, PendingActionModel
 from mimir.agent import client as agent_client
-from mimir.config import config
+from mimir.agent.config import agent_config
+from mimir.interfaces.slack.config import slack_config
 from mimir.logger import logger
 from mimir.const import APPROVE_EMOJI_NAMES, REJECT_EMOJI_NAMES
 
-_slack = AsyncWebClient(token=config.slack_bot_token)
+_tracer = trace.get_tracer("mimir.agent.approval.manager")
+
+_slack = AsyncWebClient(token=slack_config.slack_bot_token)
 
 
 async def request_approval(
@@ -28,36 +33,42 @@ async def request_approval(
     """
     from mimir.interfaces.slack.approval import format_approval_message
 
-    text = format_approval_message(payload)
+    with _tracer.start_as_current_span("approval.request") as span:
+        tool_name = payload.get("tool_name", "unknown")
+        span.set_attribute("approval.tool_name", tool_name)
+        span.set_attribute("approval.triggered_by", triggered_by)
 
-    slack_response = await _slack.chat_postMessage(
-        channel=config.slack_dm_channel_id,
-        text=text,
-    )
-    message_ts: str = slack_response["ts"]
+        text = format_approval_message(payload)
 
-    timeout_at = (
-        datetime.now(UTC) + timedelta(minutes=config.approval_timeout_minutes)
-        if config.approval_timeout_minutes > 0
-        else None
-    )
+        slack_response = await _slack.chat_postMessage(
+            channel=slack_config.slack_dm_channel_id,
+            text=text,
+        )
+        message_ts: str = slack_response["ts"]
 
-    action = await store.create(
-        session,
-        payload=payload,
-        channel_id=config.slack_dm_channel_id,
-        message_ts=message_ts,
-        triggered_by=triggered_by,
-        timeout_at=timeout_at,
-        parent_id=parent_id,
-    )
+        timeout_at = (
+            datetime.now(UTC) + timedelta(minutes=agent_config.approval_timeout_minutes)
+            if agent_config.approval_timeout_minutes > 0
+            else None
+        )
 
-    logger.info(
-        "approval_requested",
-        action_id=str(action.id),
-        message_ts=message_ts,
-    )
-    return action
+        action = await store.create(
+            session,
+            payload=payload,
+            channel_id=slack_config.slack_dm_channel_id,
+            message_ts=message_ts,
+            triggered_by=triggered_by,
+            timeout_at=timeout_at,
+            parent_id=parent_id,
+        )
+
+        span.set_attribute("approval.action_id", str(action.id))
+        logger.info(
+            "approval_requested",
+            action_id=str(action.id),
+            message_ts=message_ts,
+        )
+        return action
 
 
 async def handle_reaction(
@@ -97,10 +108,6 @@ async def _handle_approve(
     await session.commit()
 
     try:
-        logger.debug(
-            "approval_execution_started",
-            action_id=str(action.id),
-        )
         result = await executor.execute(action)
         if isinstance(result, dict) and "error" in result:
             raise Exception(result["error"])
@@ -125,7 +132,7 @@ async def _handle_approve(
         logger.error("approval_execution_error", action_id=str(action.id), error=str(e))
         return
 
-    if config.approval_reinvoke_llm:
+    if agent_config.approval_reinvoke_llm:
         description = action.payload.get("description", "the action")
         reinvoke_message = f"[Tool result for '{description}'] {result}"
         try:
@@ -146,6 +153,13 @@ async def _handle_approve(
 
 
 async def _handle_reject(session: AsyncSession, action: PendingActionModel) -> None:
+    with _tracer.start_as_current_span("approval.execute") as span:
+        span.set_attribute("approval.action_id", str(action.id))
+        span.set_attribute(
+            "approval.tool_name", action.payload.get("tool_name", "unknown")
+        )
+        span.set_attribute("approval.outcome", "rejected")
+        span.set_status(StatusCode.ERROR, "approval_rejected_by_user")
     await store.set_status(
         session, action.id, ActionStatus.rejected, resolved_at=datetime.now(UTC)
     )
@@ -209,6 +223,13 @@ async def process_timeouts(session: AsyncSession) -> None:
     """Auto-reject all pending/discussing actions whose timeout_at has passed."""
     actions = await store.get_timed_out(session)
     for action in actions:
+        with _tracer.start_as_current_span("approval.execute") as span:
+            span.set_attribute("approval.action_id", str(action.id))
+            span.set_attribute(
+                "approval.tool_name", action.payload.get("tool_name", "unknown")
+            )
+            span.set_attribute("approval.outcome", "timeout")
+            span.set_status(StatusCode.ERROR, "approval_timed_out")
         await store.set_status(
             session, action.id, ActionStatus.rejected, resolved_at=datetime.now(UTC)
         )

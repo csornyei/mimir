@@ -4,16 +4,23 @@ from typing import Any
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
+from opentelemetry import trace
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.logger import logger
+
+_tracer = trace.get_tracer("mimir.mcp_client")
 
 
 @asynccontextmanager
 async def _mcp_session():
     """Open a fully-initialized MCP session via streamable HTTP transport."""
-    logger.debug("establishing_mcp_session", url=config.mcp_url)
-    async with streamable_http_client(f"{config.mcp_url}/mcp") as (read, write, close):
+    logger.debug("establishing_mcp_session", url=agent_config.mcp_url)
+    async with streamable_http_client(f"{agent_config.mcp_url}/mcp") as (
+        read,
+        write,
+        close,
+    ):
         async with ClientSession(read, write) as session:
             await session.initialize()
             yield session
@@ -62,6 +69,11 @@ async def fetch_tools_openai_format() -> list[dict]:
 
 async def call_tool(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
     """Call a tool on the MCP server and return the result dict."""
-    async with _mcp_session() as session:
-        result = await session.call_tool(tool_name, args)
-        return _call_result_to_dict(result)
+    with _tracer.start_as_current_span(f"mcp.client.{tool_name}") as span:
+        span.set_attribute("mcp.tool.name", tool_name)
+        async with _mcp_session() as session:
+            result = await session.call_tool(tool_name, args)
+            parsed = _call_result_to_dict(result)
+            if parsed.get("isError"):
+                span.set_status(trace.StatusCode.ERROR)
+            return parsed

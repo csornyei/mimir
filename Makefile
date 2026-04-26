@@ -1,11 +1,11 @@
 api:
-	uv run fastapi dev mimir/main.py --port 8000
+	export SERVICE_NAME=agent-core && uv run fastapi dev mimir/main.py --port 8000
 
 mcp:
-	uv run python -m mimir.mcp.server
+	export SERVICE_NAME=mcp-server && uv run python -m mimir.mcp.server
 
 slack:
-	uv run python -m mimir.interfaces.slack.bot
+	export SERVICE_NAME=slack-bot && uv run python -m mimir.interfaces.slack.bot
 
 test:
 	uv run pytest --cov=mimir

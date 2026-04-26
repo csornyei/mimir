@@ -1,0 +1,12 @@
+apiVersion: 1
+datasources:
+  - name: Loki
+    uid: Loki
+    type: loki
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id":\s*"([a-zA-Z0-9_]+)"'
+          url: "$${__value.raw}"
+          datasourceUid: Tempo

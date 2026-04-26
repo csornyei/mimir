@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-from mimir.config import config
+from mimir.agent.config import agent_config
 
 
 class SemanticMemory:
@@ -12,7 +12,7 @@ class SemanticMemory:
 
     def __init__(self, path: str | Path | None = None):
         self._path: Path = (
-            Path(path) if path is not None else Path(config.semantic_memory_path)
+            Path(path) if path is not None else Path(agent_config.semantic_memory_path)
         )
 
     def read(self) -> str:

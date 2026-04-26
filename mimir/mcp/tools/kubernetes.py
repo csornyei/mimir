@@ -4,11 +4,10 @@ import kr8s.asyncio
 from kr8s.objects import Pod
 
 from mimir.logger import logger
-from mimir.mcp.app import mcp
-from mimir.mcp.decorators import write_tool
+from mimir.mcp.decorators import traced_tool, write_tool
 
 
-@mcp.tool()
+@traced_tool
 async def list_pods(namespace: str = "default") -> list[dict[str, Any]]:
     """List all pods in a namespace."""
     logger.debug("list_pods", namespace=namespace)
@@ -27,7 +26,7 @@ async def list_pods(namespace: str = "default") -> list[dict[str, Any]]:
     ]
 
 
-@mcp.tool()
+@traced_tool
 async def list_deployments(namespace: str = "default") -> list[dict[str, Any]]:
     """List all deployments in a namespace."""
     logger.debug("list_deployments", namespace=namespace)
@@ -43,7 +42,7 @@ async def list_deployments(namespace: str = "default") -> list[dict[str, Any]]:
     ]
 
 
-@mcp.tool()
+@traced_tool
 async def list_services(namespace: str = "default") -> list[dict[str, Any]]:
     """List all services in a namespace."""
     logger.debug("list_services", namespace=namespace)
@@ -66,7 +65,7 @@ async def list_services(namespace: str = "default") -> list[dict[str, Any]]:
     ]
 
 
-@mcp.tool()
+@traced_tool
 async def list_namespaces() -> list[dict[str, Any]]:
     """List all namespaces in the cluster."""
     logger.debug("list_namespaces")
@@ -79,7 +78,7 @@ async def list_namespaces() -> list[dict[str, Any]]:
     ]
 
 
-@mcp.tool()
+@traced_tool
 async def get_pod_logs(
     name: str,
     namespace: str = "default",
@@ -130,7 +129,7 @@ _RESOURCE_KIND_MAP = {
 }
 
 
-@mcp.tool()
+@traced_tool
 async def describe_resource(
     kind: str,
     name: str,
@@ -170,7 +169,7 @@ async def deploy_pod(
     }
 
 
-@mcp.tool()
+@traced_tool
 async def list_nodes() -> list[dict[str, Any]]:
     """List all nodes in the cluster."""
     logger.debug("list_nodes")

@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.models import ActionStatus, PendingActionModel
-from mimir.config import config
+from mimir.agent.config import agent_config
 
 
 async def create(
@@ -128,9 +128,9 @@ async def set_discussing(
         return
     action.status = ActionStatus.discussing
     action.thread_ts = thread_ts
-    if config.approval_discuss_timeout_hours > 0:
+    if agent_config.approval_discuss_timeout_hours > 0:
         action.timeout_at = datetime.now(UTC) + timedelta(
-            hours=config.approval_discuss_timeout_hours
+            hours=agent_config.approval_discuss_timeout_hours
         )
     else:
         action.timeout_at = None

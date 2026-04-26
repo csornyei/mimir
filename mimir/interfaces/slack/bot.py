@@ -10,11 +10,14 @@ from mimir.interfaces.slack import approval as slack_approval
 from mimir.scheduler.rss import feedback as rss_feedback
 from mimir.agent import client as agent_client
 from mimir.db import initialize_db, dispose_db
-from mimir.config import config
+from mimir.interfaces.slack.config import slack_config
 from mimir.interfaces.slack.utils import get_bot_user_id
 from mimir.logger import logger
+from mimir.telemetry import setup_tracing, slack_span
 
-app = AsyncApp(token=config.slack_bot_token)
+setup_tracing(service_name="mimir-slack-bot")
+
+app = AsyncApp(token=slack_config.slack_bot_token)
 
 
 def _conversation_id(event: dict) -> str:
@@ -81,7 +84,9 @@ async def _agent_reply(
             user_id=user_id,
             message=message,
         )
+
         duration_ms = (time.monotonic() - start_time) * 1000
+
         logger.info(
             "agent_reply_sent",
             conversation_id=conversation_id,
@@ -105,6 +110,7 @@ async def _agent_reply(
 
 
 @app.event("reaction_added")
+@slack_span("reaction_added")
 async def handle_reaction_added(event: dict, client: Any) -> None:
     logger.debug("received_reaction_added_event", slack_event=event)
     await slack_approval.on_reaction_added(event, client)
@@ -115,6 +121,7 @@ async def handle_reaction_added(event: dict, client: Any) -> None:
 
 
 @app.event("app_mention")
+@slack_span("app_mention")
 async def handle_mention(event: dict, say: Any, client: Any) -> None:
     logger.debug("received_mention_event", slack_event=event)
     bot_id = await get_bot_user_id(client)
@@ -149,6 +156,7 @@ async def handle_mention(event: dict, say: Any, client: Any) -> None:
 
 
 @app.event("message")
+@slack_span("message")
 async def handle_message(event: dict, say: Any, client: Any) -> None:
     logger.debug("received_message_event", slack_event=event)
 
@@ -232,10 +240,10 @@ async def handle_message(event: dict, say: Any, client: Any) -> None:
 
 
 async def start():
-    logger.debug("configuring_slack_bot", config=config.model_dump())
-    logger.info("Starting Slack bot")
-    initialize_db(config.database_url)
-    handler = AsyncSocketModeHandler(app, config.slack_app_token)
+    logger.debug("configuring_slack_bot", config=slack_config.model_dump())
+    logger.info("starting_slack_bot")
+    initialize_db(slack_config.database_url)
+    handler = AsyncSocketModeHandler(app, slack_config.slack_app_token)
     await handler.start_async()
 
 

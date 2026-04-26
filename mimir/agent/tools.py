@@ -1,12 +1,16 @@
-import asyncio
 import json
 from typing import Any
 
-from mimir.agent.mcp_client import call_tool
-from mimir.config import config
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
+
+from mimir.agent.config import agent_config
+from mimir.agent.dispatcher import ToolDispatcher
 from mimir.db import get_session
 from mimir.logger import logger
 from mimir.llm.client import llm_client
+
+_tracer = trace.get_tracer("mimir.agent.tools")
 
 
 def _is_write_tool(tool_name: str, tools: list[dict]) -> bool:
@@ -16,27 +20,8 @@ def _is_write_tool(tool_name: str, tools: list[dict]) -> bool:
     return False
 
 
-class ToolDispatcher:
-    """Dispatch tool calls to the MCP server and handle responses."""
-
-    async def dispatch(self, tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
-        try:
-            logger.debug("dispatching_tool", tool_name=tool_name, args=args)
-            result = await call_tool(tool_name, args)
-            logger.debug("tool_executed", tool_name=tool_name)
-            return result
-
-        except asyncio.TimeoutError:
-            error_msg = (
-                f"Tool {tool_name} timed out after {config.tool_call_timeout_seconds}s"
-            )
-            logger.error("tool_timeout", tool_name=tool_name)
-            return {"error": error_msg}
-
-        except Exception as e:
-            error_msg = f"Tool execution failed: {str(e)}"
-            logger.error("tool_execution_error", tool_name=tool_name, error=str(e))
-            return {"error": error_msg}
+class ToolLoop(ToolDispatcher):
+    """Agentic tool loop: drives LLM ↔ MCP tool calls until a final response."""
 
     async def run_tool_loop(
         self,
@@ -45,75 +30,128 @@ class ToolDispatcher:
         max_steps: int | None = None,
         triggered_by: str = "agent",
     ) -> str:
-        max_steps = max_steps or config.tool_max_steps
+        max_steps = max_steps or agent_config.tool_max_steps
         messages = messages.copy()  # Don't mutate caller's list
 
-        for step in range(max_steps):
-            logger.debug("tool_loop_step", step=step + 1, max_steps=max_steps)
+        with _tracer.start_as_current_span("agent.tool_loop") as span:
+            span.set_attribute("tool_loop.triggered_by", triggered_by)
+            span.set_attribute("tool_loop.max_steps", max_steps)
 
-            response = await llm_client.complete(messages=messages, tools=tools)
-
-            finish_reason = response.get("finish_reason", "stop")
-            content = response.get("content", "")
-            tool_calls = response.get("tool_calls", [])
-
-            assistant_msg: dict[str, Any] = {"role": "assistant", "content": content}
-            if tool_calls:
-                assistant_msg["tool_calls"] = tool_calls
-            messages.append(assistant_msg)
-
-            if not tool_calls or finish_reason == "stop":
-                logger.debug("tool_loop_final_response", step=step + 1)
-                return content
-
+            steps_taken = 0
+            tool_calls_total = 0
             approval_requested = False
-            tool_results = []
-            for tc in tool_calls:
-                tool_name = tc.get("function", {}).get("name") or tc.get("name")
-                args_raw = tc.get("function", {}).get("arguments") or tc.get(
-                    "arguments", "{}"
-                )
+            seen_call_signatures: set[frozenset] = set()
 
-                try:
-                    args = (
-                        json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+            for step in range(max_steps):
+                steps_taken = step + 1
+                logger.debug("tool_loop_step", step=steps_taken, max_steps=max_steps)
+
+                response = await llm_client.complete(messages=messages, tools=tools)
+
+                content = response.get("content", "")
+                tool_calls = response.get("tool_calls", [])
+
+                assistant_msg: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": content,
+                }
+                if tool_calls:
+                    assistant_msg["tool_calls"] = tool_calls
+                messages.append(assistant_msg)
+
+                if not tool_calls:
+                    logger.debug("tool_loop_final_response", step=steps_taken)
+                    span.set_attribute("tool_loop.steps_taken", steps_taken)
+                    span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
+                    span.set_attribute(
+                        "tool_loop.approval_requested", approval_requested
                     )
-                except json.JSONDecodeError as e:
+                    span.set_attribute("tool_loop.termination_reason", "stop")
+                    return content
+
+                # Detect model stuck in a loop (same calls, same args as a prior step)
+                call_sig = frozenset(
+                    (
+                        tc.get("function", {}).get("name") or tc.get("name"),
+                        tc.get("function", {}).get("arguments") or tc.get("arguments"),
+                    )
+                    for tc in tool_calls
+                )
+                if call_sig in seen_call_signatures:
                     logger.warning(
-                        "tool_args_json_decode_failed",
-                        tool_name=tool_name,
-                        error=str(e),
+                        "tool_loop_duplicate_calls_detected",
+                        step=steps_taken,
+                        calls=list(call_sig),
                     )
-                    args = {}
-
-                if _is_write_tool(tool_name, tools):
-                    result = await self._request_write_approval(
-                        tool_name, args, triggered_by
+                    span.set_attribute("tool_loop.steps_taken", steps_taken)
+                    span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
+                    span.set_attribute(
+                        "tool_loop.termination_reason", "duplicate_calls"
                     )
-                    approval_requested = True
-                else:
-                    result = await self.dispatch(tool_name, args)
+                    span.set_status(StatusCode.ERROR, "duplicate_calls")
+                    return content
+                seen_call_signatures.add(call_sig)
 
-                tool_results.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.get("id", ""),
-                        "name": tool_name,
-                        "content": json.dumps(result),
-                    }
-                )
+                tool_results = []
+                for tc in tool_calls:
+                    tool_name = tc.get("function", {}).get("name") or tc.get("name")
+                    args_raw = tc.get("function", {}).get("arguments") or tc.get(
+                        "arguments", "{}"
+                    )
 
-            messages.extend(tool_results)
+                    try:
+                        args = (
+                            json.loads(args_raw)
+                            if isinstance(args_raw, str)
+                            else args_raw
+                        )
+                    except json.JSONDecodeError as e:
+                        logger.warning(
+                            "tool_args_json_decode_failed",
+                            tool_name=tool_name,
+                            error=str(e),
+                        )
+                        args = {}
 
-            if approval_requested:
-                final = await llm_client.complete(messages=messages, tools=tools)
-                return final.get("content", "")
+                    if _is_write_tool(tool_name, tools):
+                        result = await self._request_write_approval(
+                            tool_name, args, triggered_by
+                        )
+                        approval_requested = True
+                    else:
+                        result = await self.dispatch(tool_name, args)
 
-        logger.warning("tool_loop_max_steps_exceeded", max_steps=max_steps)
-        return (
-            "I reached the maximum number of tool steps. "
-            "Please try a more specific request."
-        )
+                    tool_calls_total += 1
+
+                    tool_results.append(
+                        {
+                            "role": "user",
+                            "content": f"Tool result for `{tool_name}`:\n{json.dumps(result)}",
+                        }
+                    )
+
+                messages.extend(tool_results)
+
+                if approval_requested:
+                    final = await llm_client.complete(messages=messages, tools=tools)
+                    span.set_attribute("tool_loop.steps_taken", steps_taken)
+                    span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
+                    span.set_attribute("tool_loop.approval_requested", True)
+                    span.set_attribute(
+                        "tool_loop.termination_reason", "approval_requested"
+                    )
+                    return final.get("content", "")
+
+            span.set_attribute("tool_loop.steps_taken", steps_taken)
+            span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
+            span.set_attribute("tool_loop.approval_requested", approval_requested)
+            span.set_attribute("tool_loop.termination_reason", "max_steps_exceeded")
+            span.set_status(StatusCode.ERROR, "max_steps_exceeded")
+            logger.warning("tool_loop_max_steps_exceeded", max_steps=max_steps)
+            return (
+                "I reached the maximum number of tool steps. "
+                "Please try a more specific request."
+            )
 
     async def _request_write_approval(
         self, tool_name: str, args: dict[str, Any], triggered_by: str
@@ -145,9 +183,5 @@ class ToolDispatcher:
             )
             return {"error": f"Failed to request approval: {e}"}
 
-    async def close(self):
-        pass  # No persistent resources to clean up
 
-
-# Global dispatcher instance
-tool_dispatcher = ToolDispatcher()
+tool_loop = ToolLoop()

@@ -37,10 +37,14 @@ def patch_slack(mocker):
 @pytest.fixture(autouse=True)
 def patch_config(mocker):
     mocker.patch(
-        "mimir.agent.approval.manager.config.slack_dm_channel_id", "CDMCHANNEL"
+        "mimir.agent.approval.manager.slack_config.slack_dm_channel_id", "CDMCHANNEL"
     )
-    mocker.patch("mimir.agent.approval.manager.config.approval_timeout_minutes", 10)
-    mocker.patch("mimir.agent.approval.manager.config.approval_reinvoke_llm", False)
+    mocker.patch(
+        "mimir.agent.approval.manager.agent_config.approval_timeout_minutes", 10
+    )
+    mocker.patch(
+        "mimir.agent.approval.manager.agent_config.approval_reinvoke_llm", False
+    )
 
 
 # ---------------------------------------------------------------------------
