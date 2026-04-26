@@ -3,11 +3,11 @@ from typing import Any
 import httpx
 
 from mimir.logger import logger
-from mimir.mcp.app import mcp
 from mimir.mcp.config import mcp_config
+from mimir.mcp.decorators import traced_tool
 
 
-@mcp.tool()
+@traced_tool
 async def web_search(query: str, num_results: int = 10) -> list[dict[str, Any]]:
     """Search the web via SearXNG and return results with title, url, and snippet."""
     logger.debug("web_search", query=query, num_results=num_results)

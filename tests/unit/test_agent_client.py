@@ -24,7 +24,7 @@ def _make_response(status: int, body: dict) -> MagicMock:
 
 
 async def test_send_to_agent_returns_response_text(mocker):
-    mocker.patch("mimir.agent.client.config.agent_url", "http://localhost:8000")
+    mocker.patch("mimir.agent.client.agent_config.agent_url", "http://localhost:8000")
 
     mock_client = AsyncMock()
     mock_client.post.return_value = _make_response(
@@ -44,7 +44,7 @@ async def test_send_to_agent_returns_response_text(mocker):
 
 
 async def test_send_to_agent_raises_on_http_error(mocker):
-    mocker.patch("mimir.agent.client.config.agent_url", "http://localhost:8000")
+    mocker.patch("mimir.agent.client.agent_config.agent_url", "http://localhost:8000")
 
     mock_client = AsyncMock()
     mock_client.post.return_value = _make_response(500, {})

@@ -6,15 +6,32 @@ import pytest
 START = datetime(2026, 4, 17, 8, 0, tzinfo=timezone.utc)
 END = datetime(2026, 4, 17, 12, 0, tzinfo=timezone.utc)
 
-_BASE_CONFIG = dict(
-    newspaper_channel_id="C123",
+_BASE_AGENT_CONFIG = dict(
     miniflux_url="http://miniflux",
     miniflux_username="user",
     miniflux_password="pass",
     rss_digest_min_entries=10,
     rss_digest_picks=10,
+)
+
+_BASE_SLACK_CONFIG = dict(
+    newspaper_channel_id="C123",
     slack_bot_token="xoxb-test",
 )
+
+
+def _make_agent_config(**overrides):
+    cfg = MagicMock()
+    for k, v in {**_BASE_AGENT_CONFIG, **overrides}.items():
+        setattr(cfg, k, v)
+    return cfg
+
+
+def _make_slack_config(**overrides):
+    cfg = MagicMock()
+    for k, v in {**_BASE_SLACK_CONFIG, **overrides}.items():
+        setattr(cfg, k, v)
+    return cfg
 
 
 def _make_entries(n: int) -> list[dict]:
@@ -35,10 +52,15 @@ def _make_entries(n: int) -> list[dict]:
 async def test_run_digest_skips_when_channel_not_configured():
     from mimir.scheduler.rss.job import run_digest
 
-    with patch("mimir.scheduler.rss.job.config") as mock_cfg:
-        mock_cfg.newspaper_channel_id = None
-        with patch("mimir.scheduler.rss.job.RSSClient") as mock_rss:
-            await run_digest(START, END, "08-12")
+    with (
+        patch("mimir.scheduler.rss.job.agent_config", _make_agent_config()),
+        patch(
+            "mimir.scheduler.rss.job.slack_config",
+            _make_slack_config(newspaper_channel_id=None),
+        ),
+        patch("mimir.scheduler.rss.job.RSSClient") as mock_rss,
+    ):
+        await run_digest(START, END, "08-12")
 
     mock_rss.assert_not_called()
 
@@ -47,13 +69,15 @@ async def test_run_digest_skips_when_channel_not_configured():
 async def test_run_digest_skips_when_miniflux_not_configured():
     from mimir.scheduler.rss.job import run_digest
 
-    with patch("mimir.scheduler.rss.job.config") as mock_cfg:
-        mock_cfg.newspaper_channel_id = "C123"
-        mock_cfg.miniflux_url = None
-        mock_cfg.miniflux_username = "user"
-        mock_cfg.miniflux_password = "pass"
-        with patch("mimir.scheduler.rss.job.RSSClient") as mock_rss:
-            await run_digest(START, END, "08-12")
+    with (
+        patch(
+            "mimir.scheduler.rss.job.agent_config",
+            _make_agent_config(miniflux_url=None),
+        ),
+        patch("mimir.scheduler.rss.job.slack_config", _make_slack_config()),
+        patch("mimir.scheduler.rss.job.RSSClient") as mock_rss,
+    ):
+        await run_digest(START, END, "08-12")
 
     mock_rss.assert_not_called()
 
@@ -65,14 +89,13 @@ async def test_run_digest_skips_when_below_threshold():
     mock_rss = MagicMock()
     mock_rss.get_entries = AsyncMock(return_value=_make_entries(3))  # 3 < 10
 
-    with patch("mimir.scheduler.rss.job.config") as mock_cfg:
-        for k, v in _BASE_CONFIG.items():
-            setattr(mock_cfg, k, v)
-        with (
-            patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
-            patch("mimir.scheduler.rss.job.post_digest_header") as mock_post,
-        ):
-            await run_digest(START, END, "08-12")
+    with (
+        patch("mimir.scheduler.rss.job.agent_config", _make_agent_config()),
+        patch("mimir.scheduler.rss.job.slack_config", _make_slack_config()),
+        patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
+        patch("mimir.scheduler.rss.job.post_digest_header") as mock_post,
+    ):
+        await run_digest(START, END, "08-12")
 
     mock_post.assert_not_called()
 
@@ -97,33 +120,30 @@ async def test_run_digest_posts_header_and_picks():
     mock_session = AsyncMock()
     mock_session.add = MagicMock()
 
-    with patch("mimir.scheduler.rss.job.config") as mock_cfg:
-        for k, v in _BASE_CONFIG.items():
-            setattr(mock_cfg, k, v)
-        with (
-            patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
-            patch(
-                "mimir.scheduler.rss.job.summarise_feedback",
-                new=AsyncMock(return_value="No feedback."),
-            ),
-            patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem,
-            patch(
-                "mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=picks)
-            ),
-            patch(
-                "mimir.scheduler.rss.job.post_digest_header",
-                new=AsyncMock(return_value="111.000"),
-            ),
-            patch(
-                "mimir.scheduler.rss.job.post_pick",
-                new=AsyncMock(return_value="222.000"),
-            ),
-            patch("mimir.scheduler.rss.job.get_session") as mock_ctx,
-        ):
-            mock_mem.return_value.read.return_value = ""
-            mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
-            await run_digest(START, END, "08-12")
+    with (
+        patch("mimir.scheduler.rss.job.agent_config", _make_agent_config()),
+        patch("mimir.scheduler.rss.job.slack_config", _make_slack_config()),
+        patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
+        patch(
+            "mimir.scheduler.rss.job.summarise_feedback",
+            new=AsyncMock(return_value="No feedback."),
+        ),
+        patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem,
+        patch("mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=picks)),
+        patch(
+            "mimir.scheduler.rss.job.post_digest_header",
+            new=AsyncMock(return_value="111.000"),
+        ),
+        patch(
+            "mimir.scheduler.rss.job.post_pick",
+            new=AsyncMock(return_value="222.000"),
+        ),
+        patch("mimir.scheduler.rss.job.get_session") as mock_ctx,
+    ):
+        mock_mem.return_value.read.return_value = ""
+        mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+        await run_digest(START, END, "08-12")
 
     mock_session.add.assert_called_once()
     added_entry = mock_session.add.call_args[0][0]
@@ -140,20 +160,19 @@ async def test_run_digest_skips_post_when_no_picks():
     mock_rss = MagicMock()
     mock_rss.get_entries = AsyncMock(return_value=entries)
 
-    with patch("mimir.scheduler.rss.job.config") as mock_cfg:
-        for k, v in _BASE_CONFIG.items():
-            setattr(mock_cfg, k, v)
-        with (
-            patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
-            patch(
-                "mimir.scheduler.rss.job.summarise_feedback",
-                new=AsyncMock(return_value="No feedback."),
-            ),
-            patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem,
-            patch("mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=[])),
-            patch("mimir.scheduler.rss.job.post_digest_header") as mock_post,
-        ):
-            mock_mem.return_value.read.return_value = ""
-            await run_digest(START, END, "08-12")
+    with (
+        patch("mimir.scheduler.rss.job.agent_config", _make_agent_config()),
+        patch("mimir.scheduler.rss.job.slack_config", _make_slack_config()),
+        patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
+        patch(
+            "mimir.scheduler.rss.job.summarise_feedback",
+            new=AsyncMock(return_value="No feedback."),
+        ),
+        patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem,
+        patch("mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=[])),
+        patch("mimir.scheduler.rss.job.post_digest_header") as mock_post,
+    ):
+        mock_mem.return_value.read.return_value = ""
+        await run_digest(START, END, "08-12")
 
     mock_post.assert_not_called()

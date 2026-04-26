@@ -27,7 +27,7 @@ async def ingest(file: UploadFile, db: AsyncSession = Depends(get_db)):
         tmp_path = Path(tmp.name)
 
     try:
-        logger.debug("Ingesting uploaded file", filename=file.filename)
+        logger.debug("ingest_file_started", filename=file.filename)
         chunks_inserted = await ingest_file(tmp_path, db)
     finally:
         tmp_path.unlink(missing_ok=True)

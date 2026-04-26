@@ -3,8 +3,8 @@ from typing import Any
 
 from mimir.external.caldav.client import CalDAVClient
 from mimir.logger import logger
-from mimir.mcp.app import mcp
 from mimir.mcp.config import mcp_config
+from mimir.mcp.decorators import traced_tool
 
 caldav_client = CalDAVClient(
     url=mcp_config.caldav_url,
@@ -13,7 +13,7 @@ caldav_client = CalDAVClient(
 )
 
 
-@mcp.tool()
+@traced_tool
 async def get_calendar_events(start: str, end: str) -> list[dict[str, Any]]:
     """Fetch all calendar events from the configured CalDAV server within a date range.
 

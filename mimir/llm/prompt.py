@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 
 
 SYSTEM_TEMPLATE = """You are Mimir, a personal AI assistant running locally on {owner}'s hardware.
@@ -118,11 +118,11 @@ def build_system_prompt(
 ) -> str:
     sem_mem = trim_to_tokens(
         semantic_memory or "No semantic memory loaded yet.",
-        config.semantic_memory_max_tokens,
+        agent_config.semantic_memory_max_tokens,
     )
     ep_ctx = trim_to_tokens(
         episodic_context or "No relevant past conversations found.",
-        config.episodic_max_tokens,
+        agent_config.episodic_max_tokens,
     )
     tool_instructions = build_tool_instructions(tools)
 

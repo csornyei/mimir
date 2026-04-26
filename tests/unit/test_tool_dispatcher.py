@@ -1,4 +1,4 @@
-"""Tests for ToolDispatcher.run_tool_loop write-tool approval gating."""
+"""Tests for ToolLoop.run_tool_loop write-tool approval gating."""
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from mimir.agent.tools import ToolDispatcher
+from mimir.agent.tools import ToolLoop
 
 
 def _tool_call(name: str, args: dict | None = None, call_id: str = "c1") -> dict:
@@ -44,14 +44,14 @@ async def test_write_tool_requests_approval_not_dispatch(mocker):
         patch("mimir.agent.tools.llm_client") as mock_llm,
         patch("mimir.agent.tools.get_session") as mock_session_ctx,
         patch("mimir.agent.approval.manager.request_approval", new=approval_mock),
-        patch("mimir.agent.tools.ToolDispatcher.dispatch", new=dispatch_mock),
+        patch("mimir.agent.tools.ToolLoop.dispatch", new=dispatch_mock),
     ):
         mock_llm.complete = AsyncMock(side_effect=llm_responses)
         mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        dispatcher = ToolDispatcher()
-        result = await dispatcher.run_tool_loop(
+        loop = ToolLoop()
+        result = await loop.run_tool_loop(
             messages=[{"role": "user", "content": "do the thing"}],
             tools=[
                 {
@@ -83,11 +83,11 @@ async def test_read_tool_dispatches_directly(mocker):
 
     with (
         patch("mimir.agent.tools.llm_client") as mock_llm,
-        patch("mimir.agent.tools.ToolDispatcher.dispatch", new=dispatch_mock),
+        patch("mimir.agent.tools.ToolLoop.dispatch", new=dispatch_mock),
     ):
         mock_llm.complete = AsyncMock(side_effect=llm_responses)
-        dispatcher = ToolDispatcher()
-        result = await dispatcher.run_tool_loop(
+        loop = ToolLoop()
+        result = await loop.run_tool_loop(
             messages=[{"role": "user", "content": "list pods"}],
             tools=[
                 {
@@ -131,8 +131,8 @@ async def test_write_tool_injects_approval_pending_result(mocker):
         mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        dispatcher = ToolDispatcher()
-        await dispatcher.run_tool_loop(
+        loop = ToolLoop()
+        await loop.run_tool_loop(
             messages=[{"role": "user", "content": "save this"}],
             tools=[
                 {

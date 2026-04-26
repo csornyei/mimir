@@ -10,7 +10,7 @@ from watchdog.events import (
 )
 from watchdog.observers import Observer
 
-from mimir.config import config
+from mimir.agent.config import agent_config
 from mimir.db import get_session
 from mimir.logger import logger
 from mimir.rag.ingest import ingest_file
@@ -26,7 +26,7 @@ class _VaultEventHandler(FileSystemEventHandler):
         p = Path(path)
         if p.suffix.lower() not in _WATCHED_SUFFIXES:
             return
-        logger.info("Vault file changed, scheduling ingestion", path=path)
+        logger.info("vault_file_changed", path=path)
         asyncio.run_coroutine_threadsafe(self._ingest(p), self._loop)
 
     async def _ingest(self, path: Path) -> None:
@@ -34,9 +34,9 @@ class _VaultEventHandler(FileSystemEventHandler):
             async with get_session() as session:
                 n = await ingest_file(path, session)
                 await session.commit()
-            logger.info("Auto-ingestion complete", path=str(path), chunks=n)
+            logger.info("vault_file_ingestion_complete", path=str(path), chunks=n)
         except Exception as e:
-            logger.error("Auto-ingestion failed", path=str(path), error=str(e))
+            logger.error("vault_file_ingestion_failed", path=str(path), error=str(e))
 
     def on_created(self, event: FileCreatedEvent | DirCreatedEvent) -> None:
         if not event.is_directory:
@@ -52,16 +52,16 @@ class AsyncFileWatcher:
         self._observer: Observer | None = None  # type: ignore
 
     async def start(self) -> None:
-        vault_path = config.vault_path
+        vault_path = agent_config.vault_path
         loop = asyncio.get_running_loop()
         handler = _VaultEventHandler(loop)
         self._observer = Observer()
         self._observer.schedule(handler, vault_path, recursive=True)
         self._observer.start()
-        logger.info("File watcher started", vault_path=vault_path)
+        logger.info("file_watcher_started", vault_path=vault_path)
 
     async def stop(self) -> None:
         if self._observer is not None:
             self._observer.stop()
             self._observer.join()
-            logger.info("File watcher stopped")
+            logger.info("file_watcher_stopped")

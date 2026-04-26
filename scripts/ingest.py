@@ -11,7 +11,7 @@ import asyncio
 from pathlib import Path
 
 from mimir.db import get_session, initialize_db, dispose_db
-from mimir.config import config
+from mimir.config import shared_config
 from mimir.logger import logger
 from mimir.rag.ingest import ingest_file
 
@@ -31,10 +31,12 @@ async def run(root: Path, type_filter: str | None) -> None:
     ]
 
     if not files:
-        logger.warning("No files found", path=str(root), filter=type_filter)
+        logger.warning(
+            "bulk_ingestion_no_files_found", path=str(root), filter=type_filter
+        )
         return
 
-    logger.info("Starting bulk ingestion", total_files=len(files), path=str(root))
+    logger.info("bulk_ingestion_started", total_files=len(files), path=str(root))
 
     total_chunks = 0
     async with get_session() as session:
@@ -43,11 +45,11 @@ async def run(root: Path, type_filter: str | None) -> None:
                 n = await ingest_file(file, session)
                 total_chunks += n
             except Exception as e:
-                logger.error("Failed to ingest file", path=str(file), error=str(e))
+                logger.error("bulk_ingestion_file_failed", path=str(file), error=str(e))
         await session.commit()
 
     logger.info(
-        "Bulk ingestion complete", total_files=len(files), total_chunks=total_chunks
+        "bulk_ingestion_complete", total_files=len(files), total_chunks=total_chunks
     )
 
 
@@ -75,6 +77,6 @@ def main() -> None:
 if __name__ == "__main__":
     from asyncio import run as asyncio_run
 
-    initialize_db(config.database_url)
+    initialize_db(shared_config.database_url)
     main()
     asyncio_run(dispose_db())
