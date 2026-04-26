@@ -1,0 +1,105 @@
+name: Build and Push
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/mimir
+
+jobs:
+  check:
+    name: Pre-commit and Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18-trixie
+        env:
+          POSTGRES_USER: mimir
+          POSTGRES_PASSWORD: mimir
+          POSTGRES_DB: mimir
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@localhost:5432/mimir
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Run pre-commit checks
+        run: uv run pre-commit run --all-files
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        run: uv run pytest
+
+  build:
+    name: Build and Push
+    runs-on: ubuntu-latest
+    needs: check
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: api
+            dockerfile: docker/Dockerfile
+          - name: slack
+            dockerfile: docker/Dockerfile.slack
+          - name: mcp
+            dockerfile: docker/Dockerfile.mcp
+          - name: migrations
+            dockerfile: docker/Dockerfile.migrations
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read project version
+        id: read_version
+        uses: SebRollen/toml-action@v1.2.0
+        with:
+          file: "pyproject.toml"
+          field: "project.version"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:latest
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:${{ steps.read_version.outputs.value }}
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
