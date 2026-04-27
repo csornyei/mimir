@@ -48,7 +48,6 @@ def _ok_response(content: str) -> MagicMock:
 
 
 async def test_complete_returns_content(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.return_value = _ok_response("Hello there!")
     client = _make_client(http)
@@ -61,7 +60,6 @@ async def test_complete_returns_content(mocker):
 
 
 async def test_complete_posts_to_correct_endpoint(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.return_value = _ok_response("ok")
     client = _make_client(http)
@@ -74,7 +72,6 @@ async def test_complete_posts_to_correct_endpoint(mocker):
 
 
 async def test_complete_payload_contains_required_fields(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.return_value = _ok_response("ok")
     client = _make_client(http)
@@ -89,7 +86,6 @@ async def test_complete_payload_contains_required_fields(mocker):
 
 
 async def test_complete_no_tools_field_by_default(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.return_value = _ok_response("ok")
     client = _make_client(http)
@@ -102,7 +98,6 @@ async def test_complete_no_tools_field_by_default(mocker):
 
 
 async def test_complete_adds_tools_when_provided(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.return_value = _ok_response("ok")
     client = _make_client(http)
@@ -116,7 +111,6 @@ async def test_complete_adds_tools_when_provided(mocker):
 
 
 async def test_complete_propagates_http_error(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     resp = MagicMock()
     resp.status_code = 500
@@ -130,7 +124,6 @@ async def test_complete_propagates_http_error(mocker):
 
 
 async def test_complete_custom_temperature(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.return_value = _ok_response("ok")
     client = _make_client(http)
@@ -142,7 +135,6 @@ async def test_complete_custom_temperature(mocker):
 
 
 async def test_complete_custom_max_tokens(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.return_value = _ok_response("ok")
     client = _make_client(http)
@@ -159,7 +151,6 @@ async def test_complete_custom_max_tokens(mocker):
 
 
 async def test_complete_uses_fallback_on_413(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     # First attempt → 413, second attempt (fallback) → 200
     http.post.side_effect = [_413_response(), _ok_response("fallback response")]
@@ -177,7 +168,6 @@ async def test_complete_uses_fallback_on_413(mocker):
 
 
 async def test_complete_uses_second_fallback_when_first_also_413(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     # First two attempts → 413, third → 200
     http.post.side_effect = [
@@ -201,7 +191,6 @@ async def test_complete_uses_second_fallback_when_first_also_413(mocker):
 
 
 async def test_complete_re_raises_when_all_fallbacks_exhausted(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.side_effect = [_413_response(), _413_response()]
     client = _make_client(http)
@@ -216,7 +205,6 @@ async def test_complete_re_raises_when_all_fallbacks_exhausted(mocker):
 
 
 async def test_complete_413_no_fallbacks_re_raises(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.return_value = _413_response()
     client = _make_client(http)
@@ -229,7 +217,6 @@ async def test_complete_413_no_fallbacks_re_raises(mocker):
 
 
 async def test_complete_non_413_http_error_not_retried(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     resp = MagicMock()
     resp.status_code = 500
@@ -251,7 +238,6 @@ async def test_complete_non_413_http_error_not_retried(mocker):
 
 
 async def test_complete_fallback_uses_correct_messages(mocker):
-    mocker.patch("mimir.llm.client.embedding_model")
     http = AsyncMock()
     http.post.side_effect = [_413_response(), _ok_response("ok")]
     client = _make_client(http)
