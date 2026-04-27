@@ -4,8 +4,9 @@ from opentelemetry import trace
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mimir.llm.client import llm_client
+from mimir.llm.embedding import embedding_model
 from mimir.models import DocumentChunk
+from mimir.logger import logger
 
 _tracer = trace.get_tracer("mimir.rag.retrieval")
 
@@ -27,7 +28,7 @@ async def retrieve(
         span.set_attribute("rag.query_length", len(query))
 
         t0 = time.monotonic()
-        query_embedding = await llm_client.embed(query)
+        query_embedding = await embedding_model.embed_query(query)
 
         stmt = (
             select(
@@ -50,6 +51,8 @@ async def retrieve(
 
         result = await session.execute(stmt)
         rows = [(row.content, {**row.metadata_, "score": row.score}) for row in result]
+
+        logger.debug("rag_retrieval_results", rows=rows)
 
         retrieval_ms = (time.monotonic() - t0) * 1000
         top_score = max((r[1]["score"] for r in rows), default=0.0)

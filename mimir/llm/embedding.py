@@ -1,3 +1,5 @@
+from typing import Literal
+
 from httpx import AsyncClient
 
 from mimir.agent.config import agent_config
@@ -15,46 +17,51 @@ class EmbeddingModel:
             base_url=agent_config.embedding_url, headers=headers, timeout=60.0
         )
 
-    async def embed_query(self, query: str) -> list[float]:
+    async def embed(
+        self, query: list[str], prefix: Literal["search_document", "search_query"]
+    ) -> list[list[float]]:
         try:
             response = await self._client.post(
-                "/v1/embeddings",
+                "/api/embed",
                 json={
                     "model": self._model_name,
-                    "input": [query],
-                    "prompt_name": "query",
+                    "input": [f"{prefix}: {q}" for q in query],
                 },
             )
 
             response.raise_for_status()
+            """
+            {"model":"nomic-embed-text-v2-moe","embeddings":[[]],"total_duration":636086542,"load_duration":601853875,"prompt_eval_count":12}
+            """
 
-            resp_body = response.json()
+            body = response.json()
 
-            data = resp_body.get("data", [])
-            if not data or not isinstance(data, list) or "embedding" not in data[0]:
-                logger.error(
-                    "embedding_response_malformed",
-                    response_keys=list(resp_body.keys())
-                    if isinstance(resp_body, dict)
-                    else type(resp_body).__name__,
-                    data_length=len(data),
-                )
-                raise ValueError("Malformed embedding response")
+            embeddings = body["embeddings"]
 
-            embedding = data[0]["embedding"]
-            if not isinstance(embedding, list) or not all(
-                isinstance(x, (int, float)) for x in embedding
-            ):
-                logger.error(
-                    "embedding_response_invalid_embedding",
-                    embedding_type=type(embedding).__name__,
-                    embedding_preview=str(embedding)[:80],
-                )
-                raise ValueError("Invalid embedding format")
-
-            return embedding
-        except ValueError:
+            return embeddings
+        except Exception as e:
+            logger.error(
+                "embedding_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                status_code=getattr(getattr(e, "response", None), "status_code", None),
+                exc_info=True,
+            )
             raise
+
+    async def embed_query(self, query: str) -> list[float]:
+        try:
+            embeddings = await self.embed([query], "search_query")
+
+            if len(embeddings) != 1:
+                logger.error(
+                    "embedding_error",
+                    query="***".join([query[:5], query[-5:]]),
+                    embeddings_count=len(embeddings),
+                )
+                raise ValueError()
+
+            return embeddings[0]
         except Exception as e:
             logger.error(
                 "embedding_query_failed",
@@ -67,47 +74,9 @@ class EmbeddingModel:
 
     async def embed_document(self, documents: list[str]) -> list[list[float]]:
         try:
-            response = await self._client.post(
-                "/v1/embeddings",
-                json={
-                    "model": self._model_name,
-                    "input": documents,
-                    "prompt_name": "document",
-                },
-            )
-
-            response.raise_for_status()
-
-            resp_body = response.json()
-            data = resp_body.get("data", [])
-            if not data or not isinstance(data, list) or "embedding" not in data[0]:
-                logger.error(
-                    "embedding_response_malformed",
-                    response_keys=list(resp_body.keys())
-                    if isinstance(resp_body, dict)
-                    else type(resp_body).__name__,
-                    data_length=len(data),
-                    document_count=len(documents),
-                )
-                raise ValueError("Malformed embedding response")
-
-            embeddings = []
-
-            for item in data:
-                embedding = item.get("embedding")
-                if not isinstance(embedding, list) or not all(
-                    isinstance(x, (int, float)) for x in embedding
-                ):
-                    logger.warning(
-                        "embedding_response_invalid_embedding",
-                        embedding_type=type(embedding).__name__,
-                        embedding_preview=str(embedding)[:80],
-                    )
-                embeddings.append(embedding)
+            embeddings = await self.embed(documents, "search_document")
 
             return embeddings
-        except ValueError:
-            raise
         except Exception as e:
             logger.error(
                 "embedding_document_failed",
@@ -123,6 +92,8 @@ class EmbeddingModel:
 embedding_model = EmbeddingModel()
 
 if __name__ == "__main__":
+    from asyncio import run as asyncio_run
+
     test_text = "Hello, world!"
-    embedding = embedding_model.embed_query(test_text)
+    embedding = asyncio_run(embedding_model.embed([test_text], "search_query"))
     print(f"Embedding for '{test_text}': {embedding}")

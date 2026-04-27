@@ -263,32 +263,3 @@ async def test_complete_fallback_uses_correct_messages(mocker):
     # Second call should use the fallback messages
     second_call_payload = http.post.call_args_list[1][1]["json"]
     assert second_call_payload["messages"] == fallback
-
-
-# ---------------------------------------------------------------------------
-# embed() / embed_batch()
-# ---------------------------------------------------------------------------
-
-
-async def test_embed_delegates_to_embedding_model(mocker):
-    mock_em = mocker.patch("mimir.llm.client.embedding_model")
-    mock_em.embed_query = AsyncMock(return_value=[0.1, 0.2, 0.3])
-    http = AsyncMock()
-    client = _make_client(http)
-
-    result = await client.embed("hello")
-
-    mock_em.embed_query.assert_called_once_with("hello")
-    assert result == [0.1, 0.2, 0.3]
-
-
-async def test_embed_batch_delegates_to_embedding_model(mocker):
-    mock_em = mocker.patch("mimir.llm.client.embedding_model")
-    mock_em.embed_document = AsyncMock(return_value=[[0.1, 0.2], [0.3, 0.4]])
-    http = AsyncMock()
-    client = _make_client(http)
-
-    result = await client.embed_batch(["hello", "world"])
-
-    mock_em.embed_document.assert_called_once_with(["hello", "world"])
-    assert result == [[0.1, 0.2], [0.3, 0.4]]

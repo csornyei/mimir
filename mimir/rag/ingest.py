@@ -4,7 +4,7 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mimir.llm.client import llm_client
+from mimir.llm.embedding import embedding_model
 from mimir.logger import logger
 from mimir.models import DocumentChunk
 from mimir.rag.sources import markdown, pdf
@@ -81,7 +81,7 @@ async def ingest_file(path: Path, session: AsyncSession) -> int:
     # Embed all chunks in a single batch call, offloaded to a thread
     # to avoid blocking the event loop during model inference
     texts = [text for text, _ in raw_chunks]
-    embeddings = await llm_client.embed_batch(texts)
+    embeddings = await embedding_model.embed_document(texts)
 
     for index, ((text, meta), embedding) in enumerate(zip(raw_chunks, embeddings)):
         session.add(

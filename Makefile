@@ -5,6 +5,8 @@ mcp:
 	export SERVICE_NAME=mcp-server && uv run python -m mimir.mcp.server
 
 slack:
+	kubectl scale deployment mimir-slack --replicas 0 -n mimir && \
+	trap 'kubectl scale deployment mimir-slack --replicas 1 -n mimir' EXIT; \
 	export SERVICE_NAME=slack-bot && uv run python -m mimir.interfaces.slack.bot
 
 test:
