@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mimir.llm.client import llm_client
+from mimir.llm.embedding import embedding_model
 from mimir.models import ConversationModel, EpisodicMemoryModel, MessageModel
 from mimir.agent.config import agent_config
 from mimir.logger import logger
@@ -96,7 +97,7 @@ class EpisodicMemory:
         )
         summary = result["content"].strip()
 
-        embedding = await llm_client.embed(summary)
+        embedding = await embedding_model.embed_document([summary])
 
         self._session.add(
             EpisodicMemoryModel(
@@ -121,7 +122,7 @@ class EpisodicMemory:
         Each result: {summary, started_at, ended_at, score}.
         """
         try:
-            query_embedding = await llm_client.embed(query)
+            query_embedding = await embedding_model.embed_query(query)
 
             score_expr = (
                 1 - EpisodicMemoryModel.embedding.cosine_distance(query_embedding)

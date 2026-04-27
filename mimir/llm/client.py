@@ -6,7 +6,6 @@ from opentelemetry import trace
 
 from mimir.agent.config import agent_config
 from mimir.logger import logger
-from mimir.llm.embedding import embedding_model
 
 _tracer = trace.get_tracer("mimir.llm")
 
@@ -217,32 +216,6 @@ class LLMClient:
             last_error=str(last_413),
         )
         raise last_413 or Exception("All payload fallbacks exhausted")
-
-    async def embed(self, input: str) -> list[float]:
-        try:
-            embed_result = await embedding_model.embed_query(input)
-            return embed_result
-        except Exception as e:
-            logger.error(
-                "embedding_failed",
-                error=str(e),
-                error_type=type(e).__name__,
-                exc_info=True,
-            )
-            raise e
-
-    async def embed_batch(self, inputs: list[str]) -> list[list[float]]:
-        try:
-            embed_results = await embedding_model.embed_document(inputs)
-            return embed_results
-        except Exception as e:
-            logger.error(
-                "batch_embedding_failed",
-                error=str(e),
-                error_type=type(e).__name__,
-                exc_info=True,
-            )
-            raise e
 
     async def close(self):
         await self._client.aclose()
