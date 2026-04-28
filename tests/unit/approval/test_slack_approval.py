@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock
 
 
-from mimir.interfaces.slack.approval import (
+from slackbot.approval import (
     _base_emoji,
     format_approval_message,
     on_reaction_added,
@@ -47,11 +47,12 @@ def test_format_approval_message_tool_call():
 
 async def test_on_reaction_added_skips_bot_own_reaction(mocker):
     mocker.patch(
-        "mimir.interfaces.slack.approval.get_bot_user_id",
+        "slackbot.approval.get_bot_user_id",
         new=AsyncMock(return_value="UBOT"),
     )
-    mock_manager = mocker.patch("mimir.interfaces.slack.approval.manager")
-    mock_manager.handle_reaction = AsyncMock()
+    mock_http = AsyncMock()
+    mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+    mock_http.__aexit__ = AsyncMock(return_value=False)
 
     event = {
         "user": "UBOT",
@@ -59,25 +60,21 @@ async def test_on_reaction_added_skips_bot_own_reaction(mocker):
         "item": {"type": "message", "ts": "111.222"},
     }
     client = AsyncMock()
-    mock_session = AsyncMock()
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=False)
-    mocker.patch(
-        "mimir.interfaces.slack.approval.get_session", return_value=mock_session
-    )
 
     await on_reaction_added(event, client)
 
-    mock_manager.handle_reaction.assert_not_called()
+    mock_http.post.assert_not_called()
 
 
 async def test_on_reaction_added_calls_handle_reaction_with_base_emoji(mocker):
     mocker.patch(
-        "mimir.interfaces.slack.approval.get_bot_user_id",
+        "slackbot.approval.get_bot_user_id",
         new=AsyncMock(return_value="UBOT"),
     )
-    mock_manager = mocker.patch("mimir.interfaces.slack.approval.manager")
-    mock_manager.handle_reaction = AsyncMock()
+    mock_http = AsyncMock()
+    mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+    mock_http.__aexit__ = AsyncMock(return_value=False)
+    mocker.patch("slackbot.approval.httpx.AsyncClient", return_value=mock_http)
 
     event = {
         "user": "U999",
@@ -85,18 +82,13 @@ async def test_on_reaction_added_calls_handle_reaction_with_base_emoji(mocker):
         "item": {"type": "message", "ts": "111.222"},
     }
     client = AsyncMock()
-    mock_session = AsyncMock()
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=False)
-    mocker.patch(
-        "mimir.interfaces.slack.approval.get_session", return_value=mock_session
-    )
 
     await on_reaction_added(event, client)
 
-    mock_manager.handle_reaction.assert_called_once()
-    called_emoji = mock_manager.handle_reaction.call_args.args[1]
-    assert called_emoji == "+1"
+    mock_http.post.assert_called_once()
+    call_kwargs = mock_http.post.call_args
+    posted_reaction = call_kwargs.kwargs["json"]["reaction"]
+    assert posted_reaction == "+1"
 
 
 # ---------------------------------------------------------------------------

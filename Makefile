@@ -10,7 +10,7 @@ slack:
 	export SERVICE_NAME=slack-bot && uv run python -m mimir.interfaces.slack.bot
 
 test:
-	uv run pytest --cov=mimir
+	uv run pytest --cov
 
 gemma:
 	llama-server -hf unsloth/gemma-4-E4B-it-GGUF

@@ -14,7 +14,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    command: uv run fastapi run mimir/main.py --host 0.0.0.0 --port 8000
+    command: uv run fastapi run agent_core/main.py --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     env_file: .env
@@ -24,6 +24,7 @@ services:
       ENV: production
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
       SERVICE_NAME: agent_core
+      MCP_URL: http://mimir-mcp:8010
       # LLM_BASE_URL: http://host.docker.internal:8080
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
     extra_hosts:
@@ -39,7 +40,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.slack
-    command: uv run python -m mimir.interfaces.slack.bot
+    command: uv run python -m slackbot.bot
     env_file: .env
     environment:
       AGENT_URL: http://mimir-api:8000
@@ -56,7 +57,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.mcp
-    command: uv run python -m mimir.mcp.server
+    command: uv run python -m mcp_server.server
     ports:
       - "8010:8010"
     env_file: .env

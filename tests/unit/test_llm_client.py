@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import HTTPStatusError, Request, Response
 
-from mimir.llm.client import LLMClient
+from agent_core.llm.client import LLMClient
 
 
 def _413_error() -> HTTPStatusError:

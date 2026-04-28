@@ -13,8 +13,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --locked --no-dev --no-install-project --group agent
 
-COPY mimir mimir/
+COPY agent_core agent_core/
 COPY scripts scripts/
+COPY shared shared/
 COPY pyproject.toml uv.lock ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \

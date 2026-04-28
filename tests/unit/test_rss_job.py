@@ -12,9 +12,6 @@ _BASE_AGENT_CONFIG = dict(
     miniflux_password="pass",
     rss_digest_min_entries=10,
     rss_digest_picks=10,
-)
-
-_BASE_SLACK_CONFIG = dict(
     newspaper_channel_id="C123",
     slack_bot_token="xoxb-test",
 )
@@ -23,13 +20,6 @@ _BASE_SLACK_CONFIG = dict(
 def _make_agent_config(**overrides):
     cfg = MagicMock()
     for k, v in {**_BASE_AGENT_CONFIG, **overrides}.items():
-        setattr(cfg, k, v)
-    return cfg
-
-
-def _make_slack_config(**overrides):
-    cfg = MagicMock()
-    for k, v in {**_BASE_SLACK_CONFIG, **overrides}.items():
         setattr(cfg, k, v)
     return cfg
 
@@ -50,15 +40,14 @@ def _make_entries(n: int) -> list[dict]:
 
 @pytest.mark.asyncio
 async def test_run_digest_skips_when_channel_not_configured():
-    from mimir.scheduler.rss.job import run_digest
+    from agent_core.scheduler.rss.job import run_digest
 
     with (
-        patch("mimir.scheduler.rss.job.agent_config", _make_agent_config()),
         patch(
-            "mimir.scheduler.rss.job.slack_config",
-            _make_slack_config(newspaper_channel_id=None),
+            "agent_core.scheduler.rss.job.agent_config",
+            _make_agent_config(newspaper_channel_id=None),
         ),
-        patch("mimir.scheduler.rss.job.RSSClient") as mock_rss,
+        patch("agent_core.scheduler.rss.job.RSSClient") as mock_rss,
     ):
         await run_digest(START, END, "08-12")
 
@@ -67,15 +56,14 @@ async def test_run_digest_skips_when_channel_not_configured():
 
 @pytest.mark.asyncio
 async def test_run_digest_skips_when_miniflux_not_configured():
-    from mimir.scheduler.rss.job import run_digest
+    from agent_core.scheduler.rss.job import run_digest
 
     with (
         patch(
-            "mimir.scheduler.rss.job.agent_config",
+            "agent_core.scheduler.rss.job.agent_config",
             _make_agent_config(miniflux_url=None),
         ),
-        patch("mimir.scheduler.rss.job.slack_config", _make_slack_config()),
-        patch("mimir.scheduler.rss.job.RSSClient") as mock_rss,
+        patch("agent_core.scheduler.rss.job.RSSClient") as mock_rss,
     ):
         await run_digest(START, END, "08-12")
 
@@ -84,16 +72,15 @@ async def test_run_digest_skips_when_miniflux_not_configured():
 
 @pytest.mark.asyncio
 async def test_run_digest_skips_when_below_threshold():
-    from mimir.scheduler.rss.job import run_digest
+    from agent_core.scheduler.rss.job import run_digest
 
     mock_rss = MagicMock()
     mock_rss.get_entries = AsyncMock(return_value=_make_entries(3))  # 3 < 10
 
     with (
-        patch("mimir.scheduler.rss.job.agent_config", _make_agent_config()),
-        patch("mimir.scheduler.rss.job.slack_config", _make_slack_config()),
-        patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
-        patch("mimir.scheduler.rss.job.post_digest_header") as mock_post,
+        patch("agent_core.scheduler.rss.job.agent_config", _make_agent_config()),
+        patch("agent_core.scheduler.rss.job.RSSClient", return_value=mock_rss),
+        patch("agent_core.scheduler.rss.job.post_digest_header") as mock_post,
     ):
         await run_digest(START, END, "08-12")
 
@@ -102,7 +89,7 @@ async def test_run_digest_skips_when_below_threshold():
 
 @pytest.mark.asyncio
 async def test_run_digest_posts_header_and_picks():
-    from mimir.scheduler.rss.job import run_digest
+    from agent_core.scheduler.rss.job import run_digest
 
     entries = _make_entries(15)
     picks = [
@@ -121,24 +108,25 @@ async def test_run_digest_posts_header_and_picks():
     mock_session.add = MagicMock()
 
     with (
-        patch("mimir.scheduler.rss.job.agent_config", _make_agent_config()),
-        patch("mimir.scheduler.rss.job.slack_config", _make_slack_config()),
-        patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
+        patch("agent_core.scheduler.rss.job.agent_config", _make_agent_config()),
+        patch("agent_core.scheduler.rss.job.RSSClient", return_value=mock_rss),
         patch(
-            "mimir.scheduler.rss.job.summarise_feedback",
+            "agent_core.scheduler.rss.job.summarise_feedback",
             new=AsyncMock(return_value="No feedback."),
         ),
-        patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem,
-        patch("mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=picks)),
+        patch("agent_core.scheduler.rss.job.SemanticMemory") as mock_mem,
         patch(
-            "mimir.scheduler.rss.job.post_digest_header",
+            "agent_core.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=picks)
+        ),
+        patch(
+            "agent_core.scheduler.rss.job.post_digest_header",
             new=AsyncMock(return_value="111.000"),
         ),
         patch(
-            "mimir.scheduler.rss.job.post_pick",
+            "agent_core.scheduler.rss.job.post_pick",
             new=AsyncMock(return_value="222.000"),
         ),
-        patch("mimir.scheduler.rss.job.get_session") as mock_ctx,
+        patch("agent_core.scheduler.rss.job.get_session") as mock_ctx,
     ):
         mock_mem.return_value.read.return_value = ""
         mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
@@ -153,7 +141,7 @@ async def test_run_digest_posts_header_and_picks():
 
 @pytest.mark.asyncio
 async def test_run_digest_skips_post_when_no_picks():
-    from mimir.scheduler.rss.job import run_digest
+    from agent_core.scheduler.rss.job import run_digest
 
     entries = _make_entries(15)
 
@@ -161,16 +149,17 @@ async def test_run_digest_skips_post_when_no_picks():
     mock_rss.get_entries = AsyncMock(return_value=entries)
 
     with (
-        patch("mimir.scheduler.rss.job.agent_config", _make_agent_config()),
-        patch("mimir.scheduler.rss.job.slack_config", _make_slack_config()),
-        patch("mimir.scheduler.rss.job.RSSClient", return_value=mock_rss),
+        patch("agent_core.scheduler.rss.job.agent_config", _make_agent_config()),
+        patch("agent_core.scheduler.rss.job.RSSClient", return_value=mock_rss),
         patch(
-            "mimir.scheduler.rss.job.summarise_feedback",
+            "agent_core.scheduler.rss.job.summarise_feedback",
             new=AsyncMock(return_value="No feedback."),
         ),
-        patch("mimir.scheduler.rss.job.SemanticMemory") as mock_mem,
-        patch("mimir.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=[])),
-        patch("mimir.scheduler.rss.job.post_digest_header") as mock_post,
+        patch("agent_core.scheduler.rss.job.SemanticMemory") as mock_mem,
+        patch(
+            "agent_core.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=[])
+        ),
+        patch("agent_core.scheduler.rss.job.post_digest_header") as mock_post,
     ):
         mock_mem.return_value.read.return_value = ""
         await run_digest(START, END, "08-12")

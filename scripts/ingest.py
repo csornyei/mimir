@@ -9,10 +9,10 @@ Usage:
 import argparse
 from pathlib import Path
 
-from mimir.db import get_session, initialize_db, dispose_db
-from mimir.config import shared_config
-from mimir.logger import logger
-from mimir.rag.ingest import ingest_file
+from shared.db import get_session, initialize_db, dispose_db
+from shared.config import shared_config
+from shared.logger import logger
+from agent_core.rag.ingest import ingest_file
 
 _SUPPORTED = {".md", ".pdf"}
 _TYPE_FILTER = {"markdown": ".md", "pdf": ".pdf"}

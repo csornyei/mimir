@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from mimir.llm.prompt import (
+from agent_core.llm.prompt import (
     build_system_prompt,
     format_episodic_context,
     token_estimate,

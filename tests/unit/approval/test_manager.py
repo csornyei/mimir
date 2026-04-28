@@ -1,11 +1,11 @@
-"""Tests for mimir.agent.approval.manager."""
+"""Tests for agent_core.agent.approval.manager."""
 
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
-from mimir.models import ActionStatus, PendingActionModel
+from shared.models import ActionStatus, PendingActionModel
 
 
 def _make_action(
@@ -30,20 +30,21 @@ def patch_slack(mocker):
     """Replace the module-level _slack client with an AsyncMock."""
     mock = AsyncMock()
     mock.chat_postMessage.return_value = {"ts": "999.000"}
-    mocker.patch("mimir.agent.approval.manager._slack", mock)
+    mocker.patch("agent_core.agent.approval.manager._slack", mock)
     return mock
 
 
 @pytest.fixture(autouse=True)
 def patch_config(mocker):
     mocker.patch(
-        "mimir.agent.approval.manager.slack_config.slack_dm_channel_id", "CDMCHANNEL"
+        "agent_core.agent.approval.manager.agent_config.slack_dm_channel_id",
+        "CDMCHANNEL",
     )
     mocker.patch(
-        "mimir.agent.approval.manager.agent_config.approval_timeout_minutes", 10
+        "agent_core.agent.approval.manager.agent_config.approval_timeout_minutes", 10
     )
     mocker.patch(
-        "mimir.agent.approval.manager.agent_config.approval_reinvoke_llm", False
+        "agent_core.agent.approval.manager.agent_config.approval_reinvoke_llm", False
     )
 
 
@@ -55,16 +56,15 @@ def patch_config(mocker):
 async def test_request_approval_creates_db_record_and_posts_to_slack(
     mocker, patch_slack
 ):
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.create = AsyncMock(return_value=_make_action())
-    # format_approval_message is imported lazily inside request_approval
     mocker.patch(
-        "mimir.interfaces.slack.approval.format_approval_message",
+        "agent_core.agent.approval.manager._format_approval_message",
         return_value="Approve?",
     )
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     result = await manager.request_approval(
         session,
@@ -81,14 +81,14 @@ async def test_request_approval_does_not_create_record_if_slack_fails(
     mocker, patch_slack
 ):
     patch_slack.chat_postMessage.side_effect = RuntimeError("Slack down")
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mocker.patch(
-        "mimir.interfaces.slack.approval.format_approval_message",
+        "agent_core.agent.approval.manager._format_approval_message",
         return_value="Approve?",
     )
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     with pytest.raises(RuntimeError):
         await manager.request_approval(
@@ -107,16 +107,16 @@ async def test_request_approval_does_not_create_record_if_slack_fails(
 
 async def test_handle_reaction_approve_executes_and_completes(mocker, patch_slack):
     action = _make_action()
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=action)
     mock_store.set_status = AsyncMock()
     mocker.patch(
-        "mimir.agent.approval.manager.executor.execute",
+        "agent_core.agent.approval.manager.executor.execute",
         new=AsyncMock(return_value="done!"),
     )
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     await manager.handle_reaction(session, "white_check_mark", "111.222", "U999")
 
@@ -130,16 +130,16 @@ async def test_handle_reaction_approve_posts_error_on_executor_failure(
     mocker, patch_slack
 ):
     action = _make_action()
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=action)
     mock_store.set_status = AsyncMock()
     mocker.patch(
-        "mimir.agent.approval.manager.executor.execute",
+        "agent_core.agent.approval.manager.executor.execute",
         new=AsyncMock(side_effect=RuntimeError("fail")),
     )
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     await manager.handle_reaction(session, "white_check_mark", "111.222", "U999")
 
@@ -151,12 +151,12 @@ async def test_handle_reaction_approve_posts_error_on_executor_failure(
 
 async def test_handle_reaction_reject_sets_rejected_status(mocker, patch_slack):
     action = _make_action()
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=action)
     mock_store.set_status = AsyncMock()
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     await manager.handle_reaction(session, "x", "111.222", "U999")
 
@@ -174,12 +174,12 @@ async def test_handle_reaction_reject_sets_rejected_status(mocker, patch_slack):
 
 async def test_handle_reaction_ignores_unknown_emoji(mocker):
     action = _make_action()
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=action)
     mock_store.set_status = AsyncMock()
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     await manager.handle_reaction(session, "wave", "111.222", "U999")
 
@@ -188,12 +188,12 @@ async def test_handle_reaction_ignores_unknown_emoji(mocker):
 
 async def test_handle_reaction_ignores_terminal_status(mocker):
     action = _make_action(status=ActionStatus.completed)
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=action)
     mock_store.set_status = AsyncMock()
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     await manager.handle_reaction(session, "white_check_mark", "111.222", "U999")
 
@@ -201,12 +201,12 @@ async def test_handle_reaction_ignores_terminal_status(mocker):
 
 
 async def test_handle_reaction_not_found(mocker):
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=None)
     mock_store.set_status = AsyncMock()
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     # Should not raise
     await manager.handle_reaction(session, "white_check_mark", "999.999", "U999")
@@ -223,39 +223,38 @@ async def test_handle_thread_reply_transitions_pending_to_discussing(
     mocker, patch_slack
 ):
     action = _make_action(status=ActionStatus.pending)
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_thread_ts = AsyncMock(return_value=action)
     mock_store.set_discussing = AsyncMock()
     mocker.patch(
-        "mimir.agent.approval.manager.agent_client.send_to_agent",
+        "agent_core.agent.approval.manager.agent_client.send_to_agent",
         new=AsyncMock(return_value="Here's my thought..."),
     )
 
-    say = AsyncMock()
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
-    result = await manager.handle_thread_reply(
-        session, thread_ts="111.222", text="Why?", user_id="U999", say=say
+    consumed, reply = await manager.handle_thread_reply(
+        session, thread_ts="111.222", text="Why?", user_id="U999"
     )
 
-    assert result is True
+    assert consumed is True
     mock_store.set_discussing.assert_called_once()
-    say.assert_called_once()
+    assert reply is not None
 
 
 async def test_handle_thread_reply_returns_false_if_no_action(mocker):
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_thread_ts = AsyncMock(return_value=None)
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
-    result = await manager.handle_thread_reply(
-        session, thread_ts="999.999", text="hello", user_id="U999", say=AsyncMock()
+    consumed, reply = await manager.handle_thread_reply(
+        session, thread_ts="999.999", text="hello", user_id="U999"
     )
 
-    assert result is False
+    assert consumed is False
 
 
 # ---------------------------------------------------------------------------
@@ -265,12 +264,12 @@ async def test_handle_thread_reply_returns_false_if_no_action(mocker):
 
 async def test_process_timeouts_rejects_expired_actions(mocker, patch_slack):
     actions = [_make_action(), _make_action()]
-    mock_store = mocker.patch("mimir.agent.approval.manager.store")
+    mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_timed_out = AsyncMock(return_value=actions)
     mock_store.set_status = AsyncMock()
 
     session = AsyncMock()
-    from mimir.agent.approval import manager
+    from agent_core.agent.approval import manager
 
     await manager.process_timeouts(session)
 

@@ -5,12 +5,12 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_post_digest_header_returns_ts():
-    from mimir.scheduler.rss.slack import post_digest_header
+    from agent_core.scheduler.rss.job import post_digest_header
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "111.222"})
 
-    with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
+    with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
         ts = await post_digest_header("C123", 50, 8)
 
     assert ts == "111.222"
@@ -18,12 +18,12 @@ async def test_post_digest_header_returns_ts():
 
 @pytest.mark.asyncio
 async def test_post_digest_header_message_contains_counts():
-    from mimir.scheduler.rss.slack import post_digest_header
+    from agent_core.scheduler.rss.job import post_digest_header
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "111.222"})
 
-    with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
+    with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
         await post_digest_header("C123", 50, 8)
 
     call_kwargs = mock_client.chat_postMessage.call_args.kwargs
@@ -34,7 +34,7 @@ async def test_post_digest_header_message_contains_counts():
 
 @pytest.mark.asyncio
 async def test_post_pick_returns_ts():
-    from mimir.scheduler.rss.slack import post_pick
+    from agent_core.scheduler.rss.job import post_pick
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "333.444"})
@@ -45,7 +45,7 @@ async def test_post_pick_returns_ts():
         "reason": "Very relevant",
     }
 
-    with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
+    with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
         ts = await post_pick("C123", "111.222", pick)
 
     assert ts == "333.444"
@@ -53,7 +53,7 @@ async def test_post_pick_returns_ts():
 
 @pytest.mark.asyncio
 async def test_post_pick_posts_to_thread():
-    from mimir.scheduler.rss.slack import post_pick
+    from agent_core.scheduler.rss.job import post_pick
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "333.444"})
@@ -64,7 +64,7 @@ async def test_post_pick_posts_to_thread():
         "reason": "Very relevant",
     }
 
-    with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
+    with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
         await post_pick("C123", "111.222", pick)
 
     call_kwargs = mock_client.chat_postMessage.call_args.kwargs
@@ -74,7 +74,7 @@ async def test_post_pick_posts_to_thread():
 
 @pytest.mark.asyncio
 async def test_post_pick_message_contains_title_and_reason():
-    from mimir.scheduler.rss.slack import post_pick
+    from agent_core.scheduler.rss.job import post_pick
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "333.444"})
@@ -85,7 +85,7 @@ async def test_post_pick_message_contains_title_and_reason():
         "reason": "Very relevant",
     }
 
-    with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
+    with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
         await post_pick("C123", "111.222", pick)
 
     call_kwargs = mock_client.chat_postMessage.call_args.kwargs
@@ -96,7 +96,7 @@ async def test_post_pick_message_contains_title_and_reason():
 
 @pytest.mark.asyncio
 async def test_post_pick_handles_missing_reason():
-    from mimir.scheduler.rss.slack import post_pick
+    from agent_core.scheduler.rss.job import post_pick
 
     mock_client = MagicMock()
     mock_client.chat_postMessage = AsyncMock(return_value={"ts": "333.444"})
@@ -106,7 +106,7 @@ async def test_post_pick_handles_missing_reason():
         "url": "https://example.com",
     }  # no reason
 
-    with patch("mimir.scheduler.rss.slack.AsyncWebClient", return_value=mock_client):
+    with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
         ts = await post_pick("C123", "111.222", pick)
 
     assert ts == "333.444"

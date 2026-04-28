@@ -1,0 +1,96 @@
+from datetime import UTC, datetime, timedelta
+
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, StatusCode
+from sqlalchemy import func, select, update
+
+from agent_core.config import agent_config
+from shared.db import get_session
+from shared.logger import logger
+from agent_core.memory.episodic import EpisodicMemory
+from shared.models import ConversationModel, MessageModel
+
+_tracer = trace.get_tracer("mimir.scheduler.memory.consolidate")
+
+
+async def consolidate_idle_threads() -> None:
+    with _tracer.start_as_current_span(
+        "scheduler.consolidate_idle_threads", kind=SpanKind.INTERNAL
+    ) as span:
+        span.set_attribute("job.name", "consolidate_idle_threads")
+        try:
+            cutoff = datetime.now(UTC) - timedelta(
+                minutes=agent_config.episodic_idle_minutes
+            )
+
+            fresh_ids: list[str] = []
+            re_consolidation_ids: list[str] = []
+
+            async with get_session() as session:
+                fresh_rows = await session.scalars(
+                    select(ConversationModel).where(
+                        ConversationModel.last_active < cutoff,
+                        ConversationModel.consolidated_at.is_(None),
+                        ConversationModel.consolidation_retries
+                        < agent_config.episodic_max_retries,
+                    )
+                )
+                fresh_ids = [c.id for c in fresh_rows.all()]
+
+                prev_rows = await session.scalars(
+                    select(ConversationModel).where(
+                        ConversationModel.last_active < cutoff,
+                        ConversationModel.consolidated_at.is_not(None),
+                        ConversationModel.consolidation_retries
+                        < agent_config.episodic_max_retries,
+                    )
+                )
+                for conv in prev_rows.all():
+                    new_count = await session.scalar(
+                        select(func.count()).where(
+                            MessageModel.conversation_id == conv.id,
+                            MessageModel.timestamp > conv.consolidated_at,
+                        )
+                    )
+                    if new_count is None:
+                        continue
+                    if new_count >= agent_config.episodic_new_messages_threshold:
+                        re_consolidation_ids.append(conv.id)
+
+            all_ids = fresh_ids + re_consolidation_ids
+            if not all_ids:
+                return
+
+            logger.debug(
+                "consolidation_job_start",
+                fresh=len(fresh_ids),
+                re_consolidation=len(re_consolidation_ids),
+            )
+
+            for thread_id in all_ids:
+                async with get_session() as session:
+                    memory = EpisodicMemory(session)
+                    try:
+                        consolidated = await memory.consolidate(thread_id)
+                        if consolidated:
+                            logger.debug("consolidated_thread", thread_id=thread_id)
+                    except Exception as e:
+                        logger.error(
+                            "consolidation_failed",
+                            thread_id=thread_id,
+                            error=str(e),
+                            error_type=type(e).__name__,
+                            exc_info=True,
+                        )
+                        await session.execute(
+                            update(ConversationModel)
+                            .where(ConversationModel.id == thread_id)
+                            .values(
+                                consolidation_retries=ConversationModel.consolidation_retries
+                                + 1
+                            )
+                        )
+                        await session.commit()
+        except Exception as e:
+            span.set_status(StatusCode.ERROR, str(e))
+            raise

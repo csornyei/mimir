@@ -6,9 +6,9 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from mimir.base import Base
-from mimir.config import shared_config
-from mimir import models  # noqa: F401 - registers all models with Base.metadata
+from shared.base import Base
+from shared.config import shared_config
+from shared import models  # noqa: F401 - registers all models with Base.metadata
 
 alembic_config = context.config
 
