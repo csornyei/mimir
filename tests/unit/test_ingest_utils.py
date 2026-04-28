@@ -1,7 +1,7 @@
 import hashlib
 from datetime import date, datetime
 
-from mimir.rag.ingest import _parse_metadata, _sha256
+from agent_core.rag.ingest import _parse_metadata, _sha256
 
 
 # ---------------------------------------------------------------------------

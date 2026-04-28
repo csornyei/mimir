@@ -1,4 +1,4 @@
-from mimir.rag.sources.markdown import (
+from agent_core.rag.sources.markdown import (
     _cleanup_html,
     _cleanup_links,
     _extract_frontmatter,

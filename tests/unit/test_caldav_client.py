@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mimir.external.caldav.client import CalDAVClient
+from shared.external.caldav.client import CalDAVClient
 
 
 START = datetime(2026, 4, 1, tzinfo=timezone.utc)
@@ -98,7 +98,7 @@ async def test_get_events_returns_parsed_events():
         url="https://cal.example.com", username="user", password="pass"
     )
 
-    with patch("mimir.external.caldav.client.DAVClient", return_value=dav_client):
+    with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
         result = await client.get_events(START, END)
 
     assert len(result) == 1
@@ -122,7 +122,7 @@ async def test_get_events_optional_fields_none_when_missing():
         url="https://cal.example.com", username="user", password="pass"
     )
 
-    with patch("mimir.external.caldav.client.DAVClient", return_value=dav_client):
+    with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
         result = await client.get_events(START, END)
 
     assert len(result) == 1
@@ -144,7 +144,7 @@ async def test_get_events_flattens_multiple_calendars():
         url="https://cal.example.com", username="user", password="pass"
     )
 
-    with patch("mimir.external.caldav.client.DAVClient", return_value=dav_client):
+    with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
         result = await client.get_events(START, END)
 
     assert len(result) == 2
@@ -161,7 +161,7 @@ async def test_get_events_passes_date_range_to_search():
         url="https://cal.example.com", username="user", password="pass"
     )
 
-    with patch("mimir.external.caldav.client.DAVClient", return_value=dav_client):
+    with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
         await client.get_events(START, END)
 
     calendar.date_search.assert_called_once_with(start=START, end=END, expand=True)

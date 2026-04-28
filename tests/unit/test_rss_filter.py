@@ -15,7 +15,7 @@ def _entry(entry_id: int = 1, title: str = "Test Article") -> dict:
 
 
 def test_build_prompt_includes_entry_title():
-    from mimir.scheduler.rss.filter import _build_prompt
+    from agent_core.scheduler.rss.filter import _build_prompt
 
     messages = _build_prompt(
         [_entry()],
@@ -28,7 +28,7 @@ def test_build_prompt_includes_entry_title():
 
 
 def test_build_prompt_includes_semantic_memory():
-    from mimir.scheduler.rss.filter import _build_prompt
+    from agent_core.scheduler.rss.filter import _build_prompt
 
     messages = _build_prompt(
         [_entry()],
@@ -41,7 +41,7 @@ def test_build_prompt_includes_semantic_memory():
 
 
 def test_build_prompt_omits_memory_section_when_empty():
-    from mimir.scheduler.rss.filter import _build_prompt
+    from agent_core.scheduler.rss.filter import _build_prompt
 
     messages = _build_prompt(
         [_entry()],
@@ -54,7 +54,7 @@ def test_build_prompt_omits_memory_section_when_empty():
 
 
 def test_build_prompt_omits_feedback_section_when_no_data():
-    from mimir.scheduler.rss.filter import _build_prompt
+    from agent_core.scheduler.rss.filter import _build_prompt
 
     messages = _build_prompt(
         [_entry()],
@@ -67,7 +67,7 @@ def test_build_prompt_omits_feedback_section_when_no_data():
 
 
 def test_build_prompt_includes_feedback_when_present():
-    from mimir.scheduler.rss.filter import _build_prompt
+    from agent_core.scheduler.rss.filter import _build_prompt
 
     messages = _build_prompt(
         [_entry()],
@@ -81,7 +81,7 @@ def test_build_prompt_includes_feedback_when_present():
 
 
 def test_parse_picks_plain_json():
-    from mimir.scheduler.rss.filter import _parse_picks
+    from agent_core.scheduler.rss.filter import _parse_picks
 
     content = '[{"id": 1, "title": "T", "url": "u", "reason": "r"}]'
     picks = _parse_picks(content)
@@ -91,7 +91,7 @@ def test_parse_picks_plain_json():
 
 
 def test_parse_picks_fenced_json():
-    from mimir.scheduler.rss.filter import _parse_picks
+    from agent_core.scheduler.rss.filter import _parse_picks
 
     content = '```json\n[{"id": 2, "title": "A", "url": "b", "reason": "c"}]\n```'
     picks = _parse_picks(content)
@@ -100,7 +100,7 @@ def test_parse_picks_fenced_json():
 
 
 def test_parse_picks_fenced_no_lang():
-    from mimir.scheduler.rss.filter import _parse_picks
+    from agent_core.scheduler.rss.filter import _parse_picks
 
     content = '```\n[{"id": 3, "title": "X", "url": "y", "reason": "z"}]\n```'
     picks = _parse_picks(content)
@@ -108,19 +108,19 @@ def test_parse_picks_fenced_no_lang():
 
 
 def test_parse_picks_invalid_returns_empty():
-    from mimir.scheduler.rss.filter import _parse_picks
+    from agent_core.scheduler.rss.filter import _parse_picks
 
     assert _parse_picks("not json at all") == []
 
 
 def test_parse_picks_non_list_returns_empty():
-    from mimir.scheduler.rss.filter import _parse_picks
+    from agent_core.scheduler.rss.filter import _parse_picks
 
     assert _parse_picks('{"id": 1}') == []
 
 
 def test_parse_picks_prose_wrapped_json():
-    from mimir.scheduler.rss.filter import _parse_picks
+    from agent_core.scheduler.rss.filter import _parse_picks
 
     content = (
         'Here are my selections: [{"id": 1, "title": "T", "url": "u", "reason": "r"}]'
@@ -132,14 +132,14 @@ def test_parse_picks_prose_wrapped_json():
 
 @pytest.mark.asyncio
 async def test_llm_filter_returns_parsed_picks():
-    from mimir.scheduler.rss.filter import llm_filter
+    from agent_core.scheduler.rss.filter import llm_filter
 
     mock_response = {
         "content": '[{"id": 1, "title": "T", "url": "u", "reason": "relevant"}]',
         "tool_calls": [],
         "finish_reason": "stop",
     }
-    with patch("mimir.scheduler.rss.filter.llm_client") as mock_llm:
+    with patch("agent_core.scheduler.rss.filter.llm_client") as mock_llm:
         mock_llm.complete = AsyncMock(return_value=mock_response)
         picks = await llm_filter(
             [_entry()],
@@ -154,14 +154,14 @@ async def test_llm_filter_returns_parsed_picks():
 
 @pytest.mark.asyncio
 async def test_llm_filter_returns_empty_on_bad_response():
-    from mimir.scheduler.rss.filter import llm_filter
+    from agent_core.scheduler.rss.filter import llm_filter
 
     mock_response = {
         "content": "I cannot decide.",
         "tool_calls": [],
         "finish_reason": "stop",
     }
-    with patch("mimir.scheduler.rss.filter.llm_client") as mock_llm:
+    with patch("agent_core.scheduler.rss.filter.llm_client") as mock_llm:
         mock_llm.complete = AsyncMock(return_value=mock_response)
         picks = await llm_filter(
             [_entry()],

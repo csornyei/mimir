@@ -2,29 +2,23 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mimir.scheduler.briefing.job import run_morning_briefing
+from agent_core.scheduler.briefing.job import run_morning_briefing
 
 
 def _make_agent_config(
     caldav_url="https://cal.example.com",
     caldav_username="user",
     caldav_password="pass",
-):
-    cfg = MagicMock()
-    cfg.caldav_url = caldav_url
-    cfg.caldav_username = caldav_username
-    cfg.caldav_password = caldav_password
-    return cfg
-
-
-def _make_slack_config(
-    channel_id="C123456",
+    morning_brief_channel_id="C123456",
     slack_bot_token="xoxb-test",
     slack_user_id="U123456",
     morning_brief_hour=7,
 ):
     cfg = MagicMock()
-    cfg.morning_brief_channel_id = channel_id
+    cfg.caldav_url = caldav_url
+    cfg.caldav_username = caldav_username
+    cfg.caldav_password = caldav_password
+    cfg.morning_brief_channel_id = morning_brief_channel_id
     cfg.slack_bot_token = slack_bot_token
     cfg.slack_user_id = slack_user_id
     cfg.morning_brief_hour = morning_brief_hour
@@ -46,12 +40,11 @@ SAMPLE_EVENTS = [
 @pytest.mark.asyncio
 async def test_run_morning_briefing_skips_when_channel_id_missing():
     with (
-        patch("mimir.scheduler.briefing.job.agent_config", _make_agent_config()),
         patch(
-            "mimir.scheduler.briefing.job.slack_config",
-            _make_slack_config(channel_id=None),
+            "agent_core.scheduler.briefing.job.agent_config",
+            _make_agent_config(morning_brief_channel_id=None),
         ),
-        patch("mimir.scheduler.briefing.job.CalDAVClient") as mock_dav,
+        patch("agent_core.scheduler.briefing.job.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
@@ -61,11 +54,10 @@ async def test_run_morning_briefing_skips_when_channel_id_missing():
 async def test_run_morning_briefing_skips_when_caldav_url_missing():
     with (
         patch(
-            "mimir.scheduler.briefing.job.agent_config",
+            "agent_core.scheduler.briefing.job.agent_config",
             _make_agent_config(caldav_url=None),
         ),
-        patch("mimir.scheduler.briefing.job.slack_config", _make_slack_config()),
-        patch("mimir.scheduler.briefing.job.CalDAVClient") as mock_dav,
+        patch("agent_core.scheduler.briefing.job.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
@@ -75,11 +67,10 @@ async def test_run_morning_briefing_skips_when_caldav_url_missing():
 async def test_run_morning_briefing_skips_when_caldav_username_missing():
     with (
         patch(
-            "mimir.scheduler.briefing.job.agent_config",
+            "agent_core.scheduler.briefing.job.agent_config",
             _make_agent_config(caldav_username=None),
         ),
-        patch("mimir.scheduler.briefing.job.slack_config", _make_slack_config()),
-        patch("mimir.scheduler.briefing.job.CalDAVClient") as mock_dav,
+        patch("agent_core.scheduler.briefing.job.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
@@ -89,11 +80,10 @@ async def test_run_morning_briefing_skips_when_caldav_username_missing():
 async def test_run_morning_briefing_skips_when_caldav_password_missing():
     with (
         patch(
-            "mimir.scheduler.briefing.job.agent_config",
+            "agent_core.scheduler.briefing.job.agent_config",
             _make_agent_config(caldav_password=None),
         ),
-        patch("mimir.scheduler.briefing.job.slack_config", _make_slack_config()),
-        patch("mimir.scheduler.briefing.job.CalDAVClient") as mock_dav,
+        patch("agent_core.scheduler.briefing.job.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
@@ -102,20 +92,19 @@ async def test_run_morning_briefing_skips_when_caldav_password_missing():
 @pytest.mark.asyncio
 async def test_run_morning_briefing_posts_llm_response_to_slack():
     agent_cfg = _make_agent_config()
-    slack_cfg = _make_slack_config()
     mock_dav_instance = AsyncMock()
     mock_dav_instance.get_events.return_value = SAMPLE_EVENTS
     mock_slack_instance = AsyncMock()
 
     with (
-        patch("mimir.scheduler.briefing.job.agent_config", agent_cfg),
-        patch("mimir.scheduler.briefing.job.slack_config", slack_cfg),
+        patch("agent_core.scheduler.briefing.job.agent_config", agent_cfg),
         patch(
-            "mimir.scheduler.briefing.job.CalDAVClient", return_value=mock_dav_instance
+            "agent_core.scheduler.briefing.job.CalDAVClient",
+            return_value=mock_dav_instance,
         ),
-        patch("mimir.scheduler.briefing.job.llm_client") as mock_llm,
+        patch("agent_core.scheduler.briefing.job.llm_client") as mock_llm,
         patch(
-            "mimir.scheduler.briefing.job.AsyncWebClient",
+            "agent_core.scheduler.briefing.job.AsyncWebClient",
             return_value=mock_slack_instance,
         ),
     ):
@@ -130,27 +119,26 @@ async def test_run_morning_briefing_posts_llm_response_to_slack():
 
     mock_slack_instance.chat_postMessage.assert_called_once_with(
         channel="C123456",
-        text=f"*Good Morning <@{slack_cfg.slack_user_id}>! Here's your briefing for today:*\n\nGood morning! You have a standup at 9.",
+        text=f"*Good Morning <@{agent_cfg.slack_user_id}>! Here's your briefing for today:*\n\nGood morning! You have a standup at 9.",
     )
 
 
 @pytest.mark.asyncio
 async def test_run_morning_briefing_creates_caldav_client_with_config_creds():
     agent_cfg = _make_agent_config()
-    slack_cfg = _make_slack_config()
     mock_dav_instance = AsyncMock()
     mock_dav_instance.get_events.return_value = []
     mock_slack_instance = AsyncMock()
 
     with (
-        patch("mimir.scheduler.briefing.job.agent_config", agent_cfg),
-        patch("mimir.scheduler.briefing.job.slack_config", slack_cfg),
+        patch("agent_core.scheduler.briefing.job.agent_config", agent_cfg),
         patch(
-            "mimir.scheduler.briefing.job.CalDAVClient", return_value=mock_dav_instance
+            "agent_core.scheduler.briefing.job.CalDAVClient",
+            return_value=mock_dav_instance,
         ) as mock_dav_class,
-        patch("mimir.scheduler.briefing.job.llm_client") as mock_llm,
+        patch("agent_core.scheduler.briefing.job.llm_client") as mock_llm,
         patch(
-            "mimir.scheduler.briefing.job.AsyncWebClient",
+            "agent_core.scheduler.briefing.job.AsyncWebClient",
             return_value=mock_slack_instance,
         ),
     ):
@@ -177,13 +165,13 @@ async def test_run_morning_briefing_does_not_raise_on_caldav_error():
     mock_slack_instance = AsyncMock()
 
     with (
-        patch("mimir.scheduler.briefing.job.agent_config", _make_agent_config()),
-        patch("mimir.scheduler.briefing.job.slack_config", _make_slack_config()),
+        patch("agent_core.scheduler.briefing.job.agent_config", _make_agent_config()),
         patch(
-            "mimir.scheduler.briefing.job.CalDAVClient", return_value=mock_dav_instance
+            "agent_core.scheduler.briefing.job.CalDAVClient",
+            return_value=mock_dav_instance,
         ),
         patch(
-            "mimir.scheduler.briefing.job.AsyncWebClient",
+            "agent_core.scheduler.briefing.job.AsyncWebClient",
             return_value=mock_slack_instance,
         ),
     ):
@@ -199,14 +187,14 @@ async def test_run_morning_briefing_does_not_raise_on_llm_error():
     mock_slack_instance = AsyncMock()
 
     with (
-        patch("mimir.scheduler.briefing.job.agent_config", _make_agent_config()),
-        patch("mimir.scheduler.briefing.job.slack_config", _make_slack_config()),
+        patch("agent_core.scheduler.briefing.job.agent_config", _make_agent_config()),
         patch(
-            "mimir.scheduler.briefing.job.CalDAVClient", return_value=mock_dav_instance
+            "agent_core.scheduler.briefing.job.CalDAVClient",
+            return_value=mock_dav_instance,
         ),
-        patch("mimir.scheduler.briefing.job.llm_client") as mock_llm,
+        patch("agent_core.scheduler.briefing.job.llm_client") as mock_llm,
         patch(
-            "mimir.scheduler.briefing.job.AsyncWebClient",
+            "agent_core.scheduler.briefing.job.AsyncWebClient",
             return_value=mock_slack_instance,
         ),
     ):

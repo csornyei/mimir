@@ -1,19 +1,18 @@
 """Bulk ingestion script.
 
 Usage:
-    uv run python scripts/ingest.py --path /vault
-    uv run python scripts/ingest.py --path /vault --type markdown
-    uv run python scripts/ingest.py --path /vault --type pdf
+    uv run python -m scripts.ingest --path /vault
+    uv run python -m scripts.ingest --path /vault --type markdown
+    uv run python -m scripts.ingest --path /vault --type pdf
 """
 
 import argparse
-import asyncio
 from pathlib import Path
 
-from mimir.db import get_session, initialize_db, dispose_db
-from mimir.config import shared_config
-from mimir.logger import logger
-from mimir.rag.ingest import ingest_file
+from shared.db import get_session, initialize_db, dispose_db
+from shared.config import shared_config
+from shared.logger import logger
+from agent_core.rag.ingest import ingest_file
 
 _SUPPORTED = {".md", ".pdf"}
 _TYPE_FILTER = {"markdown": ".md", "pdf": ".pdf"}
@@ -53,7 +52,7 @@ async def run(root: Path, type_filter: str | None) -> None:
     )
 
 
-def main() -> None:
+async def main() -> None:
     parser = argparse.ArgumentParser(
         description="Bulk ingest files into Mimir RAG index."
     )
@@ -71,12 +70,15 @@ def main() -> None:
     if not args.path.is_dir():
         parser.error(f"--path must be a directory, got: {args.path}")
 
-    asyncio.run(run(args.path, args.type))
+    await run(args.path, args.type)
 
 
 if __name__ == "__main__":
     from asyncio import run as asyncio_run
 
-    initialize_db(shared_config.database_url)
-    main()
-    asyncio_run(dispose_db())
+    async def run_ingest():
+        initialize_db(shared_config.database_url)
+        await main()
+        await dispose_db()
+
+    asyncio_run(run_ingest())

@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from mimir.memory.semantic import SemanticMemory
+from agent_core.memory.semantic import SemanticMemory
 
 
 @pytest.fixture

@@ -1,7 +1,12 @@
 import pytest
 import fitz
 
-from mimir.rag.sources.pdf import _clean_text, _split_by_words, _token_estimate, chunk
+from agent_core.rag.sources.pdf import (
+    _clean_text,
+    _split_by_words,
+    _token_estimate,
+    chunk,
+)
 
 
 # ---------------------------------------------------------------------------
