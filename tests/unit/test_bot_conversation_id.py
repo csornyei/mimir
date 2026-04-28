@@ -1,6 +1,6 @@
 """Tests for mimir.interfaces.slack.bot._conversation_id."""
 
-from mimir.interfaces.slack.bot import _conversation_id
+from slackbot.bot import _conversation_id
 
 
 def test_conversation_id_dm():

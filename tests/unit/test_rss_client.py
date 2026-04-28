@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mimir.external.rss.client import RSSClient
+from shared.external.rss.client import RSSClient
 
 
 START = datetime(2026, 4, 17, 8, 0, tzinfo=timezone.utc)
@@ -78,7 +78,7 @@ async def test_get_entries_returns_parsed_entries():
     client = RSSClient(
         url="https://miniflux.example.com", username="user", password="pass"
     )
-    with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
+    with patch("shared.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 
     assert len(result) == 1
@@ -100,7 +100,7 @@ async def test_get_entries_passes_correct_params():
     client = RSSClient(
         url="https://miniflux.example.com", username="user", password="pass"
     )
-    with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
+    with patch("shared.external.rss.client.miniflux.Client", return_value=mock_client):
         await client.get_entries(START, END)
 
     call_kwargs = mock_client.get_entries.call_args.kwargs
@@ -119,7 +119,7 @@ async def test_get_entries_summary_truncated_to_500_chars():
     client = RSSClient(
         url="https://miniflux.example.com", username="user", password="pass"
     )
-    with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
+    with patch("shared.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 
     assert len(result[0]["summary"]) == 500
@@ -134,7 +134,7 @@ async def test_get_entries_summary_none_when_no_content():
     client = RSSClient(
         url="https://miniflux.example.com", username="user", password="pass"
     )
-    with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
+    with patch("shared.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 
     assert result[0]["summary"] is None
@@ -155,7 +155,7 @@ async def test_get_entries_paginates_when_total_exceeds_page():
     client = RSSClient(
         url="https://miniflux.example.com", username="user", password="pass"
     )
-    with patch("mimir.external.rss.client.miniflux.Client", return_value=mock_client):
+    with patch("shared.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 
     assert len(result) == 105

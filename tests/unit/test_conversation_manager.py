@@ -2,8 +2,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from mimir.agent.conversation import ConversationManager
-from mimir.models import ConversationModel, MessageModel
+from agent_core.agent.conversation import ConversationManager
+from shared.models import ConversationModel, MessageModel
 
 
 @pytest.fixture

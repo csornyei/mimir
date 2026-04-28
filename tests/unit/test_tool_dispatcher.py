@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from mimir.agent.tools import ToolLoop
+from agent_core.agent.tools import ToolLoop
 
 
 def _tool_call(name: str, args: dict | None = None, call_id: str = "c1") -> dict:
@@ -41,10 +41,10 @@ async def test_write_tool_requests_approval_not_dispatch(mocker):
     mock_session = AsyncMock()
 
     with (
-        patch("mimir.agent.tools.llm_client") as mock_llm,
-        patch("mimir.agent.tools.get_session") as mock_session_ctx,
-        patch("mimir.agent.approval.manager.request_approval", new=approval_mock),
-        patch("mimir.agent.tools.ToolLoop.dispatch", new=dispatch_mock),
+        patch("agent_core.agent.tools.llm_client") as mock_llm,
+        patch("agent_core.agent.tools.get_session") as mock_session_ctx,
+        patch("agent_core.agent.approval.manager.request_approval", new=approval_mock),
+        patch("agent_core.agent.tools.ToolLoop.dispatch", new=dispatch_mock),
     ):
         mock_llm.complete = AsyncMock(side_effect=llm_responses)
         mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
@@ -82,8 +82,8 @@ async def test_read_tool_dispatches_directly(mocker):
     ]
 
     with (
-        patch("mimir.agent.tools.llm_client") as mock_llm,
-        patch("mimir.agent.tools.ToolLoop.dispatch", new=dispatch_mock),
+        patch("agent_core.agent.tools.llm_client") as mock_llm,
+        patch("agent_core.agent.tools.ToolLoop.dispatch", new=dispatch_mock),
     ):
         mock_llm.complete = AsyncMock(side_effect=llm_responses)
         loop = ToolLoop()
@@ -120,10 +120,10 @@ async def test_write_tool_injects_approval_pending_result(mocker):
     mock_session = AsyncMock()
 
     with (
-        patch("mimir.agent.tools.llm_client") as mock_llm,
-        patch("mimir.agent.tools.get_session") as mock_session_ctx,
+        patch("agent_core.agent.tools.llm_client") as mock_llm,
+        patch("agent_core.agent.tools.get_session") as mock_session_ctx,
         patch(
-            "mimir.agent.approval.manager.request_approval",
+            "agent_core.agent.approval.manager.request_approval",
             new=AsyncMock(return_value=fake_action),
         ),
     ):

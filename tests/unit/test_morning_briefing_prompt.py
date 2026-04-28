@@ -1,4 +1,4 @@
-from mimir.scheduler.briefing.prompt import build_morning_prompt
+from agent_core.scheduler.briefing.prompt import build_morning_prompt
 
 
 SAMPLE_EVENTS = [

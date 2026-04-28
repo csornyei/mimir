@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mimir.agent.mcp_client import (
+from agent_core.agent.mcp_client import (
     _call_result_to_dict,
     _tool_to_openai,
     call_tool,
@@ -154,7 +154,7 @@ async def test_fetch_tools_openai_format_returns_converted_tools():
     mock_session = AsyncMock()
     mock_session.list_tools = AsyncMock(return_value=list_result)
 
-    with patch("mimir.agent.mcp_client._mcp_session") as mock_ctx:
+    with patch("agent_core.agent.mcp_client._mcp_session") as mock_ctx:
         mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -173,7 +173,7 @@ async def test_fetch_tools_openai_format_empty():
     mock_session = AsyncMock()
     mock_session.list_tools = AsyncMock(return_value=list_result)
 
-    with patch("mimir.agent.mcp_client._mcp_session") as mock_ctx:
+    with patch("agent_core.agent.mcp_client._mcp_session") as mock_ctx:
         mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -198,7 +198,7 @@ async def test_call_tool_returns_result_dict():
     mock_session = AsyncMock()
     mock_session.call_tool = AsyncMock(return_value=call_result)
 
-    with patch("mimir.agent.mcp_client._mcp_session") as mock_ctx:
+    with patch("agent_core.agent.mcp_client._mcp_session") as mock_ctx:
         mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -215,7 +215,7 @@ async def test_call_tool_propagates_exception():
     mock_session = AsyncMock()
     mock_session.call_tool = AsyncMock(side_effect=ConnectionError("server down"))
 
-    with patch("mimir.agent.mcp_client._mcp_session") as mock_ctx:
+    with patch("agent_core.agent.mcp_client._mcp_session") as mock_ctx:
         mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
 
