@@ -24,10 +24,14 @@ async def get_calendar_events(start: str, end: str) -> list[dict[str, Any]]:
     Returns:
         List of events with uid, summary, start, end, description, and location fields.
     """
-    logger.debug("get_calendar_events", start=start, end=end)
-    start_dt = datetime.fromisoformat(start)
-    end_dt = datetime.fromisoformat(end)
-    return await caldav_client.get_events(start_dt, end_dt)
+    try:
+        logger.debug("get_calendar_events", start=start, end=end)
+        start_dt = datetime.fromisoformat(start)
+        end_dt = datetime.fromisoformat(end)
+        return await caldav_client.get_events(start_dt, end_dt)
+    except Exception as e:
+        logger.error("Error fetching calendar events", error=str(e), exec_info=True)
+        return []
 
 
 @traced_tool

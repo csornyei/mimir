@@ -8,5 +8,8 @@ class MCPConfig(SharedConfig):
 
     searxng_url: str = "http://localhost:8888"
 
+    forgejo_url: str = ""
+    forgejo_token: str = ""
+
 
 mcp_config = MCPConfig()
