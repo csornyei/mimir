@@ -25,6 +25,7 @@ agent = [
     "apscheduler>=3.11.2",
     "caldav>=3.1.0",
     "fastapi[standard]>=0.135.3",
+    "jinja2>=3.1.6",
     "lxml>=6.0.2",
     "miniflux>=1.1.6",
     "opentelemetry-instrumentation-fastapi>=0.62b0",
