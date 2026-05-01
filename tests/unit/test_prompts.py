@@ -135,8 +135,15 @@ def test_morning_briefing_system_with_weather():
 
 def test_morning_briefing_user_contains_events():
     result = render_morning_briefing_user(
-        event_text="- 09:00 to 09:30: Standup @ Room A",
+        event_text=[
+            {
+                "summary": "Standup",
+                "start": "2026-05-01T10:00:00+00:00",
+                "location": "Room A",
+            }
+        ],
         weather_data=None,
+        todo_text=None,
     )
     assert "Standup" in result
     assert "Room A" in result
@@ -144,18 +151,64 @@ def test_morning_briefing_user_contains_events():
 
 def test_morning_briefing_user_without_weather_omits_forecast():
     result = render_morning_briefing_user(
-        event_text="- 10:00: Meeting", weather_data=None
+        event_text=[
+            {
+                "summary": "Meeting",
+                "start": "2026-05-01T10:00:00+00:00",
+                "location": "Room B",
+            }
+        ],
+        weather_data=None,
+        todo_text=None,
     )
     assert "weather forecast" not in result.lower()
 
 
 def test_morning_briefing_user_with_weather_includes_forecast():
     result = render_morning_briefing_user(
-        event_text="- 10:00: Meeting",
+        event_text=[
+            {
+                "summary": "Meeting",
+                "start": "2026-05-01T10:00:00+00:00",
+                "location": "Room B",
+            }
+        ],
         weather_data={"summary": "Sunny, 24°C"},
+        todo_text=None,
     )
     assert "weather forecast" in result.lower()
     assert "Sunny" in result
+
+
+def test_morning_briefing_user_with_todos_includes_todo_section():
+    todos = [{"summary": "Buy groceries", "due": "2026-05-01"}]
+    result = render_morning_briefing_user(
+        event_text=[
+            {
+                "summary": "Meeting",
+                "start": "2026-05-01T10:00:00+00:00",
+                "location": "Room B",
+            }
+        ],
+        weather_data=None,
+        todo_text=todos,
+    )
+    assert "to-do" in result.lower()
+
+
+def test_morning_briefing_user_without_todos_omits_todo_section():
+    result = render_morning_briefing_user(
+        event_text=[
+            {
+                "summary": "Meeting",
+                "start": "2026-05-01T10:00:00+00:00",
+                "location": "Room B",
+            }
+        ],
+        weather_data=None,
+        todo_text=None,
+    )
+    assert "to-do" not in result.lower()
 
 
 # ---------------------------------------------------------------------------

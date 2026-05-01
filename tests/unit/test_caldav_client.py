@@ -44,7 +44,7 @@ def _make_caldav_event(vevents: list[MagicMock]) -> MagicMock:
 
 def _make_calendar(events: list[MagicMock]) -> MagicMock:
     calendar = MagicMock()
-    calendar.date_search.return_value = events
+    calendar.search.return_value = events
     return calendar
 
 
@@ -164,7 +164,9 @@ async def test_get_events_passes_date_range_to_search():
     with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
         await client.get_events(START, END)
 
-    calendar.date_search.assert_called_once_with(start=START, end=END, expand=True)
+    calendar.search.assert_called_once_with(
+        start=START, end=END, event=True, expand=True
+    )
 
 
 def test_init_does_not_raise_with_none_credentials():
@@ -173,3 +175,148 @@ def test_init_does_not_raise_with_none_credentials():
     assert client.url is None
     assert client.username is None
     assert client.password is None
+
+
+# --- Todo helpers ---
+
+
+def _make_vtodo(
+    uid="todo-1",
+    summary="Buy groceries",
+    due=datetime(2026, 4, 30, 17, 0, tzinfo=timezone.utc),
+    description=None,
+    status=None,
+) -> MagicMock:
+    data = {
+        "UID": uid,
+        "SUMMARY": summary,
+        "DUE": MagicMock(dt=due) if due else None,
+        "DESCRIPTION": description,
+        "STATUS": status,
+    }
+    component = MagicMock()
+    component.get.side_effect = lambda key, default=None: data.get(key, default)
+    return component
+
+
+def _make_caldav_todo(vtodos: list[MagicMock]) -> MagicMock:
+    cal = MagicMock()
+    cal.walk.return_value = vtodos
+    todo = MagicMock()
+    todo.icalendar_component = cal
+    return todo
+
+
+def _make_todo_calendar(todos: list[MagicMock]) -> MagicMock:
+    calendar = MagicMock()
+    calendar.search.return_value = todos
+    return calendar
+
+
+# --- Todo tests ---
+
+
+@pytest.mark.asyncio
+async def test_get_todos_raises_when_url_missing():
+    client = CalDAVClient(url=None, username="user", password="pass")
+    with pytest.raises(RuntimeError, match="CALDAV_URL"):
+        await client.get_todos(END)
+
+
+@pytest.mark.asyncio
+async def test_get_todos_raises_when_username_missing():
+    client = CalDAVClient(url="https://cal.example.com", username=None, password="pass")
+    with pytest.raises(RuntimeError, match="CALDAV_USERNAME"):
+        await client.get_todos(END)
+
+
+@pytest.mark.asyncio
+async def test_get_todos_raises_when_password_missing():
+    client = CalDAVClient(url="https://cal.example.com", username="user", password=None)
+    with pytest.raises(RuntimeError, match="CALDAV_PASSWORD"):
+        await client.get_todos(END)
+
+
+@pytest.mark.asyncio
+async def test_get_todos_returns_parsed_todos():
+    vtodo = _make_vtodo(
+        uid="todo-1",
+        summary="Buy groceries",
+        due=datetime(2026, 4, 30, 17, 0, tzinfo=timezone.utc),
+        description="From the list",
+        status="NEEDS-ACTION",
+    )
+    dav_todo = _make_caldav_todo([vtodo])
+    calendar = _make_todo_calendar([dav_todo])
+    dav_client = _make_dav_client([calendar])
+
+    client = CalDAVClient(
+        url="https://cal.example.com", username="user", password="pass"
+    )
+
+    with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
+        result = await client.get_todos(END)
+
+    assert len(result) == 1
+    todo = result[0]
+    assert todo["uid"] == "todo-1"
+    assert todo["summary"] == "Buy groceries"
+    assert todo["description"] == "From the list"
+    assert todo["status"] == "NEEDS-ACTION"
+    assert "2026-04-30" in todo["due"]
+
+
+@pytest.mark.asyncio
+async def test_get_todos_optional_fields_none_when_missing():
+    vtodo = _make_vtodo(due=None, description=None, status=None)
+    dav_todo = _make_caldav_todo([vtodo])
+    calendar = _make_todo_calendar([dav_todo])
+    dav_client = _make_dav_client([calendar])
+
+    client = CalDAVClient(
+        url="https://cal.example.com", username="user", password="pass"
+    )
+
+    with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
+        result = await client.get_todos(END)
+
+    assert len(result) == 1
+    todo = result[0]
+    assert todo["due"] is None
+    assert todo["description"] is None
+    assert todo["status"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_todos_flattens_multiple_calendars():
+    vtodo_a = _make_vtodo(uid="todo-a", summary="Task A")
+    vtodo_b = _make_vtodo(uid="todo-b", summary="Task B")
+    cal_a = _make_todo_calendar([_make_caldav_todo([vtodo_a])])
+    cal_b = _make_todo_calendar([_make_caldav_todo([vtodo_b])])
+    dav_client = _make_dav_client([cal_a, cal_b])
+
+    client = CalDAVClient(
+        url="https://cal.example.com", username="user", password="pass"
+    )
+
+    with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
+        result = await client.get_todos(END)
+
+    assert len(result) == 2
+    uids = {t["uid"] for t in result}
+    assert uids == {"todo-a", "todo-b"}
+
+
+@pytest.mark.asyncio
+async def test_get_todos_passes_end_to_search():
+    calendar = _make_todo_calendar([])
+    dav_client = _make_dav_client([calendar])
+
+    client = CalDAVClient(
+        url="https://cal.example.com", username="user", password="pass"
+    )
+
+    with patch("shared.external.caldav.client.DAVClient", return_value=dav_client):
+        await client.get_todos(END)
+
+    calendar.search.assert_called_once_with(end=END, todo=True)

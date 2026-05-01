@@ -6,7 +6,7 @@ import mcp_server.tools.calendar  # noqa: F401
 import mcp_server.tools.kubernetes  # noqa: F401
 import mcp_server.tools.memory  # noqa: F401
 import mcp_server.tools.search  # noqa: F401
-
+import mcp_server.tools.git  # noqa: F401
 
 if __name__ == "__main__":
     try:

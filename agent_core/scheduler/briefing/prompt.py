@@ -6,26 +6,11 @@ from agent_core.prompts import (
 )
 
 
-def _format_events(events: list[dict[str, Any]]) -> str:
-    if not events:
-        return "No events scheduled for today."
-    lines = []
-    for e in events:
-        start = e.get("start") or "?"
-        end = e.get("end") or "?"
-        summary = e.get("summary") or "(no title)"
-        location = e.get("location")
-        line = f"- {start} to {end}: {summary}"
-        if location:
-            line += f" @ {location}"
-        lines.append(line)
-    return "\n".join(lines)
-
-
 def build_morning_prompt(
-    events: list[dict[str, Any]], weather_data: dict[str, Any] | None = None
+    events: list[dict[str, Any]],
+    weather_data: dict[str, Any] | None = None,
+    todos: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
-    event_text = _format_events(events)
     return [
         {
             "role": "system",
@@ -34,7 +19,7 @@ def build_morning_prompt(
         {
             "role": "user",
             "content": render_morning_briefing_user(
-                event_text=event_text, weather_data=weather_data
+                event_text=events, weather_data=weather_data, todo_text=todos
             ),
         },
     ]

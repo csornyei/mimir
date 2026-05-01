@@ -15,6 +15,7 @@ class SharedConfig(BaseSettings):
     caldav_url: Optional[str] = None
     caldav_username: Optional[str] = None
     caldav_password: Optional[str] = None
+    default_calendar_name: Optional[str] = None
 
     env: str = "development"
     service_name: str = "mimir"

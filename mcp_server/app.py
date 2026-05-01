@@ -8,7 +8,7 @@ from shared.logger import logger
 from mcp_server.config import mcp_config
 from shared.telemetry import setup_tracing
 
-setup_tracing(service_name="mimir-mcp")
+setup_tracing(service_name=mcp_config.service_name)
 StarletteInstrumentor().instrument()
 
 
