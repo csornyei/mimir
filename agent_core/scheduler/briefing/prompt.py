@@ -1,5 +1,10 @@
 from typing import Any
 
+from agent_core.prompts import (
+    render_morning_briefing_system,
+    render_morning_briefing_user,
+)
+
 
 def _format_events(events: list[dict[str, Any]]) -> str:
     if not events:
@@ -17,16 +22,19 @@ def _format_events(events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_morning_prompt(events: list[dict[str, Any]]) -> list[dict[str, str]]:
-    system = (
-        "You are Mimir, a personal AI assistant. "
-        "Write a friendly and concise morning briefing. "
-        "Mention every calendar event for today. "
-        "Be warm, practical, and brief."
-    )
+def build_morning_prompt(
+    events: list[dict[str, Any]], weather_data: dict[str, Any] | None = None
+) -> list[dict[str, str]]:
     event_text = _format_events(events)
-    user = f"Here are today's calendar events:\n\n{event_text}\n\nPlease write the morning briefing."
     return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
+        {
+            "role": "system",
+            "content": render_morning_briefing_system(weather_data=bool(weather_data)),
+        },
+        {
+            "role": "user",
+            "content": render_morning_briefing_user(
+                event_text=event_text, weather_data=weather_data
+            ),
+        },
     ]

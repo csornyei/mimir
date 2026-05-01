@@ -5,6 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_core.llm.client import llm_client
 from agent_core.llm.embedding import embedding_model
+from agent_core.prompts import (
+    render_episodic_consolidation_initial,
+    render_episodic_consolidation_update,
+)
 from shared.models import ConversationModel, EpisodicMemoryModel, MessageModel
 from agent_core.config import agent_config
 from shared.logger import logger
@@ -62,21 +66,11 @@ class EpisodicMemory:
         transcript = "\n".join(f"{m.role.upper()}: {m.content}" for m in messages)
 
         if prior_summary:
-            prompt = (
-                f"Previous summary of this conversation:\n{prior_summary}\n\n"
-                f"New messages since the last summary:\n{transcript}\n\n"
-                "Produce an updated 2-3 sentence summary incorporating both the previous summary "
-                "and the new messages. Focus on facts, decisions, topics, and context useful for "
-                "future recall. Be specific — include names, project names, conclusions."
+            prompt = render_episodic_consolidation_update(
+                prior_summary=prior_summary, transcript=transcript
             )
         else:
-            prompt = (
-                "Summarise this conversation in 2-3 sentences. "
-                "Focus on facts, decisions, topics discussed, and context "
-                "that would be useful to recall in a future conversation. "
-                "Be specific — include names, project names, conclusions.\n\n"
-                f"{transcript}"
-            )
+            prompt = render_episodic_consolidation_initial(transcript=transcript)
 
         result = await llm_client.complete(
             messages=[{"role": "user", "content": prompt}],
