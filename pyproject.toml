@@ -1,6 +1,6 @@
 [project]
 name = "mimir"
-version = "1.2.0"
+version = "1.2.1"
 description = "Self-hosted AI assistant."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -58,6 +58,7 @@ dev = [
 ]
 web-fetch = [
     "fastapi[standard]>=0.135.3",
+    "opentelemetry-instrumentation-fastapi>=0.62b0",
     "playwright>=1.59.0",
     "trafilatura>=2.0.0",
 ]
