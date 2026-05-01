@@ -57,3 +57,16 @@ def test_build_morning_prompt_no_events_notes_empty_schedule():
         "no events" in messages[1]["content"].lower()
         or "nothing" in messages[1]["content"].lower()
     )
+
+
+def test_build_morning_prompt_with_todos_includes_todo_section():
+    todos = [
+        {"summary": "Buy groceries", "due": "2026-05-01", "status": "NEEDS-ACTION"}
+    ]
+    messages = build_morning_prompt(SAMPLE_EVENTS, todos=todos)
+    assert "to-do" in messages[1]["content"].lower()
+
+
+def test_build_morning_prompt_without_todos_omits_todo_section():
+    messages = build_morning_prompt(SAMPLE_EVENTS)
+    assert "to-do" not in messages[1]["content"].lower()

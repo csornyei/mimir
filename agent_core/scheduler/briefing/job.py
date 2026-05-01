@@ -39,12 +39,13 @@ async def run_morning_briefing() -> None:
             password=agent_config.caldav_password,
         )
         events = await client.get_events(today_start, today_end)
+        todos = await client.get_todos(today_end)
 
         weather_data = None
         if agent_config.weather_config_path:
             weather_data = await get_weather_data(agent_config.weather_config_path)
 
-        messages = build_morning_prompt(events, weather_data)
+        messages = build_morning_prompt(events, weather_data, todos)
         response = await llm_client.complete(messages=messages)
         briefing_text = response.get("content", "")
 
