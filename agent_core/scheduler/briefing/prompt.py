@@ -17,15 +17,23 @@ def _format_events(events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_morning_prompt(events: list[dict[str, Any]]) -> list[dict[str, str]]:
+def build_morning_prompt(
+    events: list[dict[str, Any]], weather_data: dict[str, Any] | None = None
+) -> list[dict[str, str]]:
     system = (
         "You are Mimir, a personal AI assistant. "
         "Write a friendly and concise morning briefing. "
         "Mention every calendar event for today. "
-        "Be warm, practical, and brief."
+        "Include a brief summary of the weather forecast and what to expect today and for the rest of the week. "
+        "Be warm, practical, and brief. "
+        "Your response will be added after a greeting that includes \"Good morning\", the user's name and a header that says 'Here's your briefing for today'."
     )
     event_text = _format_events(events)
-    user = f"Here are today's calendar events:\n\n{event_text}\n\nPlease write the morning briefing."
+
+    weather_text = (
+        f"Here is the weather forecast:\n\n{weather_data}\n\n" if weather_data else ""
+    )
+    user = f"Here are today's calendar events:\n\n{event_text}\n\n{weather_text}\nPlease write the morning briefing."
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user},

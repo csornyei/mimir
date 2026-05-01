@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 
 class SharedConfig(BaseSettings):
@@ -11,14 +12,16 @@ class SharedConfig(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/mimir"
     semantic_memory_path: str = "vault/memory.md"
 
-    caldav_url: str | None = None
-    caldav_username: str | None = None
-    caldav_password: str | None = None
+    caldav_url: Optional[str] = None
+    caldav_username: Optional[str] = None
+    caldav_password: Optional[str] = None
 
     env: str = "development"
     service_name: str = "mimir"
     otel_exporter_otlp_endpoint: str = "http://alloy:4317"
     environment: str = "homelab"
+
+    weather_config_path: Optional[str] = None
 
 
 shared_config = SharedConfig()
