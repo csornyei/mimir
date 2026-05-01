@@ -13,6 +13,7 @@ def _make_agent_config(
     slack_bot_token="xoxb-test",
     slack_user_id="U123456",
     morning_brief_hour=7,
+    weather_config_path=None,
 ):
     cfg = MagicMock()
     cfg.caldav_url = caldav_url
@@ -22,6 +23,7 @@ def _make_agent_config(
     cfg.slack_bot_token = slack_bot_token
     cfg.slack_user_id = slack_user_id
     cfg.morning_brief_hour = morning_brief_hour
+    cfg.weather_config_path = weather_config_path
     return cfg
 
 
@@ -110,7 +112,7 @@ async def test_run_morning_briefing_posts_llm_response_to_slack():
     ):
         mock_llm.complete = AsyncMock(
             return_value={
-                "content": "Good morning! You have a standup at 9.",
+                "content": "You have a standup at 9.",
                 "tool_calls": [],
                 "finish_reason": "stop",
             }
@@ -119,7 +121,7 @@ async def test_run_morning_briefing_posts_llm_response_to_slack():
 
     mock_slack_instance.chat_postMessage.assert_called_once_with(
         channel="C123456",
-        text=f"*Good Morning <@{agent_cfg.slack_user_id}>! Here's your briefing for today:*\n\nGood morning! You have a standup at 9.",
+        text=f"*Good Morning <@{agent_cfg.slack_user_id}>! Here's your briefing for today:*\n\nYou have a standup at 9.",
     )
 
 

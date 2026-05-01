@@ -45,7 +45,16 @@ def write_tool(func):
         kind=inspect.Parameter.KEYWORD_ONLY,
         annotation=str,
     )
-    new_sig = sig.replace(parameters=list(sig.parameters.values()) + [action_id_param])
+    params = list(sig.parameters.values())
+    var_keyword = next(
+        (i for i, p in enumerate(params) if p.kind == inspect.Parameter.VAR_KEYWORD),
+        None,
+    )
+    if var_keyword is not None:
+        params.insert(var_keyword, action_id_param)
+    else:
+        params.append(action_id_param)
+    new_sig = sig.replace(parameters=params)
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):

@@ -27,3 +27,13 @@ async def web_search(query: str, num_results: int = 10) -> list[dict[str, Any]]:
         }
         for r in data.get("results", [])[:num_results]
     ]
+
+
+@traced_tool
+async def web_fetch(url: str) -> dict[str, Any] | None:
+    """Fetch the content of a web page using the web_fetch service."""
+    logger.debug("web_fetch", url=url)
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(mcp_config.web_fetch_url, params={"url": url})
+        response.raise_for_status()
+        return response.json()

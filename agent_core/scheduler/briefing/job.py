@@ -4,6 +4,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 
 from agent_core.config import agent_config
 from shared.external.caldav.client import CalDAVClient
+from shared.external.weather.weather import get_weather_data
 from agent_core.llm.client import llm_client
 from shared.logger import logger
 from agent_core.scheduler.briefing.prompt import build_morning_prompt
@@ -38,8 +39,13 @@ async def run_morning_briefing() -> None:
             password=agent_config.caldav_password,
         )
         events = await client.get_events(today_start, today_end)
+        todos = await client.get_todos(today_end)
 
-        messages = build_morning_prompt(events)
+        weather_data = None
+        if agent_config.weather_config_path:
+            weather_data = await get_weather_data(agent_config.weather_config_path)
+
+        messages = build_morning_prompt(events, weather_data, todos)
         response = await llm_client.complete(messages=messages)
         briefing_text = response.get("content", "")
 
@@ -66,3 +72,9 @@ async def run_morning_briefing() -> None:
             error_type=type(e).__name__,
             exc_info=True,
         )
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(run_morning_briefing())

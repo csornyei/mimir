@@ -89,6 +89,22 @@ services:
     profiles:
       - database
 
+  web_fetch:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web_fetch
+    command: uv run fastapi run web_fetch/main.py --host 0.0.0.0 --port 8020
+    env_file: .env
+    ports:
+      - "8020:8020"
+    environment:
+      ENV: production
+      SERVICE_NAME: web_fetch
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+    profiles:
+      - web_fetch
+    restart: unless-stopped
+
   searxng:
     container_name: searxng-core
     image: docker.io/searxng/searxng:${SEARXNG_VERSION:-latest}
