@@ -27,10 +27,10 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@localhost:5432/mimir
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8.1.0
 
       - name: Install dependencies
         run: uv sync --all-groups
