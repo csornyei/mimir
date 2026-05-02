@@ -1,13 +1,18 @@
 from datetime import datetime, UTC
 
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_core.llm.client import llm_client
 from agent_core.llm.embedding import embedding_model
+from agent_core.llm.prompt import format_episodic_context
 from shared.models import ConversationModel, EpisodicMemoryModel, MessageModel
 from agent_core.config import agent_config
 from shared.logger import logger
+
+_tracer = trace.get_tracer("mimir.memory.episodic")
 
 _CONSOLIDATION_MIN_MESSAGES = 5
 _RETRIEVAL_THRESHOLD = 0.6
@@ -144,3 +149,22 @@ class EpisodicMemory:
                 exc_info=True,
             )
             raise e
+
+    async def retrieve_formatted(self, query: str, k: int) -> str:
+        """Retrieve episodic memories and format for prompt insertion."""
+        with _tracer.start_as_current_span("episodic.retrieve_formatted") as span:
+            try:
+                memories = await self.retrieve(query, k=k)
+                span.set_attribute("episodic.memories_found", len(memories))
+                logger.debug("episodic_retrieval", count=len(memories))
+                return format_episodic_context(memories)
+            except Exception as e:
+                logger.error(
+                    "episodic_retrieval_formatted_failed",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    query_length=len(query),
+                    exc_info=True,
+                )
+                span.set_status(StatusCode.ERROR, str(e))
+                return ""
