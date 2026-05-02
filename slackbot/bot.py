@@ -14,7 +14,7 @@ from shared.db import initialize_db, dispose_db
 from shared.logger import logger
 from shared.telemetry import setup_tracing, slack_span
 
-setup_tracing(service_name="mimir-slack-bot")
+setup_tracing(service_name=slack_config.service_name)
 
 app = AsyncApp(token=slack_config.slack_bot_token)
 

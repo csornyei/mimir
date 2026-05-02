@@ -1,0 +1,11 @@
+{% if semantic_memory %}## About the user
+{{ semantic_memory }}
+
+{% endif %}{% if feedback_summary and feedback_summary != "No feedback recorded yet." %}## Past feedback
+{{ feedback_summary }}
+
+{% endif %}## Articles to consider
+{% for entry in entries %}[{{ entry.id }}] {{ entry.title }} ({{ entry.feed_name or "Unknown" }} / {{ entry.category or "Unknown" }})
+{% if entry.summary %}    {{ entry.summary[:200] }}
+{% endif %}{% endfor %}
+Select up to {{ n_picks }} articles. Return the JSON array.

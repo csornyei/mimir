@@ -43,7 +43,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         rag_context, _ = await retrieve_rag_context(
             request.message, db, agent_config.rag_max_tokens
         )
-        episodic_context = await EpisodicMemory(db).retrieve_formatted(
+        episodic_context = await EpisodicMemory(db).retrieve(
             request.message, k=agent_config.episodic_retrieval_k
         )
 

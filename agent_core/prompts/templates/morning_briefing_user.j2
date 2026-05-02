@@ -1,0 +1,23 @@
+Here are today's calendar events:
+
+{% if event_text %}
+
+{{ event_text }}
+
+{% else %}
+
+no events
+
+{% endif %}
+
+{% if todo_text %}Here are the user's to-dos:
+
+{{ todo_text }}
+
+{% endif %}
+
+{% if weather_data %}Here is the weather forecast:
+
+{{ weather_data }}
+
+{% endif %}Please write the morning briefing.

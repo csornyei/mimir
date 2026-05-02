@@ -1,32 +1,25 @@
 from typing import Any
 
-
-def _format_events(events: list[dict[str, Any]]) -> str:
-    if not events:
-        return "No events scheduled for today."
-    lines = []
-    for e in events:
-        start = e.get("start") or "?"
-        end = e.get("end") or "?"
-        summary = e.get("summary") or "(no title)"
-        location = e.get("location")
-        line = f"- {start} to {end}: {summary}"
-        if location:
-            line += f" @ {location}"
-        lines.append(line)
-    return "\n".join(lines)
+from agent_core.prompts import (
+    render_morning_briefing_system,
+    render_morning_briefing_user,
+)
 
 
-def build_morning_prompt(events: list[dict[str, Any]]) -> list[dict[str, str]]:
-    system = (
-        "You are Mimir, a personal AI assistant. "
-        "Write a friendly and concise morning briefing. "
-        "Mention every calendar event for today. "
-        "Be warm, practical, and brief."
-    )
-    event_text = _format_events(events)
-    user = f"Here are today's calendar events:\n\n{event_text}\n\nPlease write the morning briefing."
+def build_morning_prompt(
+    events: list[dict[str, Any]],
+    weather_data: dict[str, Any] | None = None,
+    todos: list[dict[str, Any]] | None = None,
+) -> list[dict[str, str]]:
     return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
+        {
+            "role": "system",
+            "content": render_morning_briefing_system(weather_data=bool(weather_data)),
+        },
+        {
+            "role": "user",
+            "content": render_morning_briefing_user(
+                event_text=events, weather_data=weather_data, todo_text=todos
+            ),
+        },
     ]

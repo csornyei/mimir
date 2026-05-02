@@ -1,13 +1,15 @@
 from datetime import datetime, UTC
 
 from opentelemetry import trace
-from opentelemetry.trace import StatusCode
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_core.llm.client import llm_client
 from agent_core.llm.embedding import embedding_model
-from agent_core.llm.prompt import format_episodic_context
+from agent_core.prompts import (
+    render_episodic_consolidation_initial,
+    render_episodic_consolidation_update,
+)
 from shared.models import ConversationModel, EpisodicMemoryModel, MessageModel
 from agent_core.config import agent_config
 from shared.logger import logger
@@ -67,21 +69,11 @@ class EpisodicMemory:
         transcript = "\n".join(f"{m.role.upper()}: {m.content}" for m in messages)
 
         if prior_summary:
-            prompt = (
-                f"Previous summary of this conversation:\n{prior_summary}\n\n"
-                f"New messages since the last summary:\n{transcript}\n\n"
-                "Produce an updated 2-3 sentence summary incorporating both the previous summary "
-                "and the new messages. Focus on facts, decisions, topics, and context useful for "
-                "future recall. Be specific — include names, project names, conclusions."
+            prompt = render_episodic_consolidation_update(
+                prior_summary=prior_summary, transcript=transcript
             )
         else:
-            prompt = (
-                "Summarise this conversation in 2-3 sentences. "
-                "Focus on facts, decisions, topics discussed, and context "
-                "that would be useful to recall in a future conversation. "
-                "Be specific — include names, project names, conclusions.\n\n"
-                f"{transcript}"
-            )
+            prompt = render_episodic_consolidation_initial(transcript=transcript)
 
         result = await llm_client.complete(
             messages=[{"role": "user", "content": prompt}],
@@ -149,22 +141,3 @@ class EpisodicMemory:
                 exc_info=True,
             )
             raise e
-
-    async def retrieve_formatted(self, query: str, k: int) -> str:
-        """Retrieve episodic memories and format for prompt insertion."""
-        with _tracer.start_as_current_span("episodic.retrieve_formatted") as span:
-            try:
-                memories = await self.retrieve(query, k=k)
-                span.set_attribute("episodic.memories_found", len(memories))
-                logger.debug("episodic_retrieval", count=len(memories))
-                return format_episodic_context(memories)
-            except Exception as e:
-                logger.error(
-                    "episodic_retrieval_formatted_failed",
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    query_length=len(query),
-                    exc_info=True,
-                )
-                span.set_status(StatusCode.ERROR, str(e))
-                return ""

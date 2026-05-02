@@ -16,7 +16,7 @@ from agent_core.routes.ingest import router as ingest_router
 from agent_core.scheduler.jobs import create_scheduler
 from shared.telemetry import setup_tracing
 
-setup_tracing(service_name="mimir-agent-core")
+setup_tracing(service_name=agent_config.service_name)
 
 
 @asynccontextmanager

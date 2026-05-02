@@ -1,6 +1,7 @@
 import functools
 import inspect
 from uuid import UUID
+from time import time
 
 from mcp.types import ToolAnnotations
 from opentelemetry import trace
@@ -22,9 +23,14 @@ def traced_tool(func):
         with _tracer.start_as_current_span(f"mcp.tool.{func.__name__}") as span:
             span.set_attribute("mcp.tool.name", func.__name__)
             try:
+                start = time()
                 result = await func(*args, **kwargs)
                 if isinstance(result, dict) and result.get("error"):
                     span.set_status(trace.StatusCode.ERROR, result["error"])
+
+                duration = time() - start
+                span.set_attribute("mcp.tool.duration", duration)
+                logger.info("tool_executed", tool_name=func.__name__, duration=duration)
                 return result
             except Exception as e:
                 span.set_status(trace.StatusCode.ERROR, str(e))
@@ -45,7 +51,16 @@ def write_tool(func):
         kind=inspect.Parameter.KEYWORD_ONLY,
         annotation=str,
     )
-    new_sig = sig.replace(parameters=list(sig.parameters.values()) + [action_id_param])
+    params = list(sig.parameters.values())
+    var_keyword = next(
+        (i for i, p in enumerate(params) if p.kind == inspect.Parameter.VAR_KEYWORD),
+        None,
+    )
+    if var_keyword is not None:
+        params.insert(var_keyword, action_id_param)
+    else:
+        params.append(action_id_param)
+    new_sig = sig.replace(parameters=params)
 
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):

@@ -8,17 +8,23 @@ from shared.logger import logger
 from mcp_server.config import mcp_config
 from shared.telemetry import setup_tracing
 
-setup_tracing(service_name="mimir-mcp")
-StarletteInstrumentor().instrument()
+setup_tracing(service_name=mcp_config.service_name)
+
+mcp = FastMCP(mcp_config.service_name)
 
 
 @asynccontextmanager
-async def _lifespan(server: FastMCP):
-    initialize_db(mcp_config.database_url)
-    logger.info("mcp_server_started")
-    yield
-    await dispose_db()
-    logger.info("mcp_server_stopped")
+async def _lifespan(app):
+    async with mcp.session_manager.run():
+        initialize_db(mcp_config.database_url)
+        logger.info("mcp_server_started")
+        yield
+        await dispose_db()
+        logger.info("mcp_server_stopped")
 
 
-mcp = FastMCP("mimir", host="0.0.0.0", port=8010, lifespan=_lifespan)
+app = mcp.streamable_http_app()
+
+app.router.lifespan_context = _lifespan
+
+StarletteInstrumentor().instrument_app(app)
