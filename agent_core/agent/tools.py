@@ -40,7 +40,7 @@ class ToolLoop(ToolDispatcher):
             steps_taken = 0
             tool_calls_total = 0
             approval_requested = False
-            seen_call_signatures: set[frozenset] = set()
+            seen_individual_calls: set[tuple] = set()
 
             for step in range(max_steps):
                 steps_taken = step + 1
@@ -69,34 +69,31 @@ class ToolLoop(ToolDispatcher):
                     span.set_attribute("tool_loop.termination_reason", "stop")
                     return content
 
-                call_sig = frozenset(
-                    (
-                        tc.get("function", {}).get("name") or tc.get("name"),
-                        tc.get("function", {}).get("arguments") or tc.get("arguments"),
-                    )
-                    for tc in tool_calls
-                )
-                if call_sig in seen_call_signatures:
-                    logger.warning(
-                        "tool_loop_duplicate_calls_detected",
-                        step=steps_taken,
-                        calls=list(call_sig),
-                    )
-                    span.set_attribute("tool_loop.steps_taken", steps_taken)
-                    span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
-                    span.set_attribute(
-                        "tool_loop.termination_reason", "duplicate_calls"
-                    )
-                    span.set_status(StatusCode.ERROR, "duplicate_calls")
-                    return content
-                seen_call_signatures.add(call_sig)
-
                 tool_results = []
                 for tc in tool_calls:
                     tool_name = tc.get("function", {}).get("name") or tc.get("name")
                     args_raw = tc.get("function", {}).get("arguments") or tc.get(
                         "arguments", "{}"
                     )
+
+                    call_sig = (
+                        tool_name,
+                        args_raw if isinstance(args_raw, str) else json.dumps(args_raw, sort_keys=True),
+                    )
+                    if call_sig in seen_individual_calls:
+                        logger.warning(
+                            "tool_call_duplicate_skipped",
+                            tool_name=tool_name,
+                            step=steps_taken,
+                        )
+                        tool_results.append(
+                            {
+                                "role": "user",
+                                "content": f"Tool `{tool_name}` was already called with the same arguments — skipping duplicate.",
+                            }
+                        )
+                        continue
+                    seen_individual_calls.add(call_sig)
 
                     try:
                         args = (
