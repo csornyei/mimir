@@ -85,6 +85,30 @@ class EmbeddingModel:
             )
             raise
 
+    async def embed_single_document(self, document: str) -> list[float]:
+        try:
+            embeddings = await self.embed_document([document])
+
+            if len(embeddings) != 1:
+                logger.error(
+                    "embedding_single_document_error",
+                    document="***".join([document[:5], document[-5:]]),
+                    embeddings_count=len(embeddings),
+                )
+                raise ValueError()
+
+            return embeddings[0]
+        except Exception as e:
+            logger.error(
+                "embedding_single_document_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+                status_code=getattr(getattr(e, "response", None), "status_code", None),
+                document="***".join([document[:5], document[-5:]]),
+                exc_info=True,
+            )
+            raise
+
 
 embedding_model = EmbeddingModel()
 
