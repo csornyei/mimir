@@ -8,6 +8,7 @@ class MCPConfig(SharedConfig):
 
     searxng_url: str = "http://localhost:8888"
     web_fetch_url: str = "http://localhost:8020/fetch"
+    allowed_hosts: list[str] = ["*"]
 
     forgejo_url: str = ""
     forgejo_token: str = ""
