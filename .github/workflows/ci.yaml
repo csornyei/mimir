@@ -43,6 +43,7 @@ jobs:
   check:
     name: Pre-commit and Tests
     runs-on: ubuntu-latest
+    needs: version-check
     services:
       postgres:
         image: pgvector/pgvector:pg18-trixie
