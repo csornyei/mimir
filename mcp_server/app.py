@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from opentelemetry.instrumentation.starlette import StarletteInstrumentor
 
 from shared.db import initialize_db, dispose_db
@@ -10,7 +11,17 @@ from shared.telemetry import setup_tracing
 
 setup_tracing(service_name=mcp_config.service_name)
 
-mcp = FastMCP(mcp_config.service_name)
+_transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[
+        "127.0.0.1:*",
+        "localhost:*",
+        "[::1]:*",
+        *mcp_config.allowed_hosts,
+    ],
+)
+
+mcp = FastMCP(mcp_config.service_name, transport_security=_transport_security)
 
 
 @asynccontextmanager
