@@ -1,4 +1,5 @@
 import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from opentelemetry import trace
@@ -29,6 +30,7 @@ class ToolLoop(ToolDispatcher):
         tools: list[dict],
         max_steps: int | None = None,
         triggered_by: str = "agent",
+        on_tool_call: Callable[[str, dict, dict], Awaitable[None]] | None = None,
     ) -> str:
         max_steps = max_steps or agent_config.tool_max_steps
         messages = messages.copy()
@@ -120,6 +122,12 @@ class ToolLoop(ToolDispatcher):
                         result = await self.dispatch(tool_name, args)
 
                     tool_calls_total += 1
+
+                    if on_tool_call is not None:
+                        try:
+                            await on_tool_call(tool_name, args, result)
+                        except Exception:
+                            pass
 
                     tool_results.append(
                         {

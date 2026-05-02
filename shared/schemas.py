@@ -65,3 +65,12 @@ class PendingActionCreate(BaseModel):
 
 class PendingActionPatch(BaseModel):
     status: str
+
+
+class WSChatRequest(BaseModel):
+    event_type: str
+    request_id: str | None = None
+    conversation_id: str
+    user_id: str
+    message: str
+    verbose: bool = False

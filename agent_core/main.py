@@ -14,6 +14,7 @@ from agent_core.routes.chat import router as chat_router
 from agent_core.routes.conversations import router as conversations_router
 from agent_core.routes.ingest import router as ingest_router
 from agent_core.scheduler.jobs import create_scheduler
+from agent_core.ws.router import ws_endpoint
 from shared.telemetry import setup_tracing
 
 setup_tracing(service_name=agent_config.service_name)
@@ -42,6 +43,7 @@ app.include_router(conversations_router, prefix="/api", tags=["conversations"])
 app.include_router(chat_router, prefix="/api", tags=["chat"])
 app.include_router(ingest_router, prefix="/api", tags=["ingest"])
 app.include_router(approvals_router, prefix="/api", tags=["approvals"])
+app.add_api_websocket_route("/ws", ws_endpoint)
 
 semantic_memory = SemanticMemory()
 
