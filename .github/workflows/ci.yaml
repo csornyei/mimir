@@ -6,6 +6,40 @@ on:
       - main
 
 jobs:
+  version-check:
+    name: Version Bump Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Read PR version
+        id: pr_version
+        uses: SebRollen/toml-action@v1.2.0
+        with:
+          file: "pyproject.toml"
+          field: "project.version"
+
+      - name: Export main pyproject.toml
+        run: git show origin/main:pyproject.toml > /tmp/main_pyproject.toml
+
+      - name: Read main version
+        id: main_version
+        uses: SebRollen/toml-action@v1.2.0
+        with:
+          file: "/tmp/main_pyproject.toml"
+          field: "project.version"
+
+      - name: Check version is bumped
+        run: |
+          if [ "${{ steps.pr_version.outputs.value }}" = "${{ steps.main_version.outputs.value }}" ]; then
+            echo "::error::Version '${{ steps.pr_version.outputs.value }}' matches main. Bump the version before merging."
+            exit 1
+          fi
+          echo "Version bumped: ${{ steps.main_version.outputs.value }} -> ${{ steps.pr_version.outputs.value }}"
+
   check:
     name: Pre-commit and Tests
     runs-on: ubuntu-latest
