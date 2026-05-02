@@ -78,7 +78,9 @@ class ToolLoop(ToolDispatcher):
 
                     call_sig = (
                         tool_name,
-                        args_raw if isinstance(args_raw, str) else json.dumps(args_raw, sort_keys=True),
+                        args_raw
+                        if isinstance(args_raw, str)
+                        else json.dumps(args_raw, sort_keys=True),
                     )
                     if call_sig in seen_individual_calls:
                         logger.warning(
