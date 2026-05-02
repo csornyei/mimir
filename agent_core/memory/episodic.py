@@ -81,7 +81,7 @@ class EpisodicMemory:
         )
         summary = result["content"].strip()
 
-        embedding = await embedding_model.embed_document([summary])
+        embedding = await embedding_model.embed_single_document(summary)
 
         self._session.add(
             EpisodicMemoryModel(
