@@ -11,12 +11,17 @@ from shared.telemetry import setup_tracing
 
 setup_tracing(service_name=mcp_config.service_name)
 
-mcp = FastMCP(
-    mcp_config.service_name,
-    transport_security=TransportSecuritySettings(
-        allowed_hosts=mcp_config.allowed_hosts
-    ),
+_transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[
+        "127.0.0.1:*",
+        "localhost:*",
+        "[::1]:*",
+        *mcp_config.allowed_hosts,
+    ],
 )
+
+mcp = FastMCP(mcp_config.service_name, transport_security=_transport_security)
 
 
 @asynccontextmanager

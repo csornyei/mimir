@@ -13,5 +13,7 @@ class MCPConfig(SharedConfig):
     forgejo_url: str = ""
     forgejo_token: str = ""
 
+    allowed_hosts: list[str] = []
+
 
 mcp_config = MCPConfig()
