@@ -81,6 +81,13 @@ async def _agent_reply(
             user_id=user_id,
             duration_ms=duration_ms,
         )
+        if not reply:
+            logger.warning(
+                "agent_returned_empty_reply",
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
+            reply = "I wasn't able to generate a response. Please try again."
         await say(text=reply, thread_ts=thread_ts)
         return True
     except Exception as e:

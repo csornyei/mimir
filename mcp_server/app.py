@@ -17,7 +17,7 @@ _transport_security = TransportSecuritySettings(
         "127.0.0.1:*",
         "localhost:*",
         "[::1]:*",
-        *mcp_config.allowed_hosts,
+        *mcp_config.allowed_hosts.split(","),
     ],
 )
 
