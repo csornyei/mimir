@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -67,10 +68,71 @@ class PendingActionPatch(BaseModel):
     status: str
 
 
+# ── LLM settings sent with every chat WS event ──────────────────────────────
+
+
+class LLMSettings(BaseModel):
+    mode: Literal["precise", "balanced", "creative", "fast"] = "balanced"
+    enable_thinking: bool = True
+    thinking_budget: int | None = (
+        2000  # null = unlimited; 0 = disabled; irrelevant if enable_thinking=False
+    )
+    temperature: float = 0.5
+    top_p: float = 0.9
+    min_p: float = 0.05
+    repetition_penalty: float = 1.0
+    max_tokens: int = 4096
+
+
+# ── WebSocket ────────────────────────────────────────────────────────────────
+
+
 class WSChatRequest(BaseModel):
-    event_type: str
+    type: str  # must be "chat"
     request_id: str | None = None
-    conversation_id: str
-    user_id: str
+    conversation_id: str | None = None  # null → backend creates a new conversation
+    user_id: str = "web"
     message: str
-    verbose: bool = False
+    settings: LLMSettings | None = None
+
+
+# ── Approval wrappers ────────────────────────────────────────────────────────
+
+
+class ApproveRequest(BaseModel):
+    edited_arguments: dict | None = None
+
+
+# ── Memory ───────────────────────────────────────────────────────────────────
+
+
+class MemoryResponse(BaseModel):
+    content: str
+
+
+class MemoryWriteRequest(BaseModel):
+    content: str
+
+
+class MemoryWriteResponse(BaseModel):
+    status: str = "ok"
+
+
+# ── Digest ───────────────────────────────────────────────────────────────────
+
+
+class DigestArticle(BaseModel):
+    id: int
+    title: str
+    url: str
+    feed_name: str | None
+    category: str | None
+    window: str
+    digest_run_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DigestFeedbackRequest(BaseModel):
+    article_id: int
+    rating: Literal["up", "down"]

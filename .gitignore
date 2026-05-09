@@ -216,3 +216,5 @@ __marimo__/
 .streamlit/secrets.toml
 scratch/
 .DS_Store
+
+!agent_ui/src/lib

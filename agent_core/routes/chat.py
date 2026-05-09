@@ -45,7 +45,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
         # Each step is explicit so the future WS handler can emit progress between them
         semantic_memory_content = semantic_memory.read()
-        rag_context, _ = await retrieve_rag_context(
+        rag_context, _, _ = await retrieve_rag_context(
             request.message, db, agent_config.rag_max_tokens
         )
         episodic_context = await EpisodicMemory(db).retrieve(

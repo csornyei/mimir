@@ -17,6 +17,7 @@ COPY agent_core agent_core/
 COPY scripts scripts/
 COPY shared shared/
 COPY config config/
+COPY agent_ui/dist agent_ui/dist/
 COPY pyproject.toml uv.lock ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \

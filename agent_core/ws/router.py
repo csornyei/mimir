@@ -19,25 +19,25 @@ HANDLERS = {
 async def ws_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
     sender = WSSender(websocket)
-    await sender.send({"event_type": "connected"})
+    await sender.send({"type": "connected"})
 
     try:
         async for text in websocket.iter_text():
             try:
                 data = json.loads(text)
             except json.JSONDecodeError:
-                await sender.send({"event_type": "error", "error": "invalid_json"})
+                await sender.send({"type": "error", "message": "invalid_json"})
                 continue
 
-            event_type = data.get("event_type")
+            event_type = data.get("type")
             handler = HANDLERS.get(event_type)
 
             if handler is None:
                 await sender.send(
                     {
-                        "event_type": "error",
+                        "type": "error",
                         "request_id": data.get("request_id"),
-                        "error": f"unknown_event_type: {event_type!r}",
+                        "message": f"unknown_event_type: {event_type!r}",
                     }
                 )
                 continue
@@ -56,7 +56,7 @@ async def _run_handler(handler, sender: WSSender, data: dict, ctx) -> None:
     except Exception as e:
         logger.error(
             "ws_handler_unhandled_error",
-            event_type=data.get("event_type"),
+            event_type=data.get("type"),
             error=str(e),
             error_type=type(e).__name__,
             exc_info=True,

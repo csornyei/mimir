@@ -1,3 +1,6 @@
+import time
+from uuid import uuid4
+
 from opentelemetry import trace
 
 from agent_core.agent.context import ChatContext
@@ -26,74 +29,86 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
         except Exception as e:
             await sender.send(
                 {
-                    "event_type": "error",
+                    "type": "error",
                     "request_id": data.get("request_id"),
-                    "error": f"Invalid request: {e}",
+                    "message": f"Invalid request: {e}",
                 }
             )
             return
 
-        span.set_attribute("chat.conversation_id", req.conversation_id)
+        span.set_attribute("chat.conversation_id", str(req.conversation_id))
         span.set_attribute("chat.user_id", req.user_id)
-        span.set_attribute("chat.verbose", req.verbose)
 
-        await sender.send(
-            {
-                "event_type": "chat_ack",
-                "request_id": req.request_id,
-                "conversation_id": req.conversation_id,
-            }
-        )
+        settings = req.settings
+
+        # Validate thinking settings consistency before dispatching
+        if settings and settings.enable_thinking and settings.thinking_budget == 0:
+            await sender.send(
+                {
+                    "type": "error",
+                    "request_id": data.get("request_id"),
+                    "message": "Invalid settings: enable_thinking=True but thinking_budget=0. "
+                    "Set thinking_budget to null (unlimited) or a positive integer, "
+                    "or set enable_thinking=False.",
+                }
+            )
+            return
+        if (
+            settings
+            and not settings.enable_thinking
+            and settings.thinking_budget
+            and settings.thinking_budget > 0
+        ):
+            await sender.send(
+                {
+                    "type": "error",
+                    "request_id": data.get("request_id"),
+                    "message": "Invalid settings: enable_thinking=False but thinking_budget is set. "
+                    "Set thinking_budget to 0 or null when thinking is disabled.",
+                }
+            )
+            return
+
+        temperature = settings.temperature if settings else None
+        max_tokens = settings.max_tokens if settings else None
+        top_p = settings.top_p if settings else None
+        min_p = settings.min_p if settings else None
+        repetition_penalty = settings.repetition_penalty if settings else None
+        enable_thinking = settings.enable_thinking if settings else None
+        thinking_budget = settings.thinking_budget if settings else None
+
+        t_start = time.monotonic()
 
         try:
+            # Ensure conversation exists; create if null
             async with get_session() as db:
-                await conversation_manager.get_or_create_conversation(
-                    db, req.conversation_id
-                )
+                if req.conversation_id:
+                    await conversation_manager.get_or_create_conversation(
+                        db, req.conversation_id
+                    )
+                    conversation_id = req.conversation_id
+                else:
+                    conversation_id = f"web|{uuid4()}"
+                    await conversation_manager.get_or_create_conversation(
+                        db, conversation_id
+                    )
                 await conversation_manager.add_message(
-                    db, req.conversation_id, "user", req.message
+                    db, conversation_id, "user", req.message
                 )
 
-            if req.verbose:
-                await sender.send(
-                    {
-                        "event_type": "chat_thinking",
-                        "step": "memory",
-                        "request_id": req.request_id,
-                    }
-                )
+            span.set_attribute("chat.resolved_conversation_id", conversation_id)
 
             semantic_memory_content = _semantic_memory.read()
 
             async with get_session() as db:
-                rag_context, rag_chunks_used = await retrieve_rag_context(
+                rag_context, _chunks_used, rag_sources = await retrieve_rag_context(
                     req.message, db, agent_config.rag_max_tokens
                 )
-                episodic_memories = await EpisodicMemory(db).retrieve(
+                episodic_memories_raw = await EpisodicMemory(db).retrieve(
                     req.message, k=agent_config.episodic_retrieval_k
                 )
 
-            episodic_context = format_episodic_context(episodic_memories)
-
-            if req.verbose:
-                await sender.send(
-                    {
-                        "event_type": "chat_thinking",
-                        "step": "memory_done",
-                        "request_id": req.request_id,
-                        "rag_chunks_used": rag_chunks_used,
-                        "episodic_count": len(episodic_memories),
-                    }
-                )
-
-            if req.verbose:
-                await sender.send(
-                    {
-                        "event_type": "chat_thinking",
-                        "step": "tools",
-                        "request_id": req.request_id,
-                    }
-                )
+            episodic_context = format_episodic_context(episodic_memories_raw)
 
             try:
                 tools = await tool_schema_registry.get_tools()
@@ -117,32 +132,107 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
 
             async with get_session() as db:
                 bundle = await build_messages(
-                    context, req.conversation_id, db, agent_config
+                    context, conversation_id, db, agent_config
                 )
 
-            on_tool_call = (
-                _make_tool_callback(sender, req.request_id) if req.verbose else None
-            )
+            # ── WS event callbacks ─────────────────────────────────────────
+
+            async def on_tool_start(name: str, args: dict, call_id: str) -> None:
+                await sender.send(
+                    {
+                        "type": "tool_call",
+                        "request_id": req.request_id,
+                        "name": name,
+                        "arguments": args,
+                        "call_id": call_id,
+                    }
+                )
+
+            async def on_tool_done(name: str, result: str, call_id: str) -> None:
+                await sender.send(
+                    {
+                        "type": "tool_result",
+                        "request_id": req.request_id,
+                        "name": name,
+                        "result": result,
+                        "call_id": call_id,
+                    }
+                )
+
+            async def on_approval_required(
+                action_id: str, tool_name: str, args: dict
+            ) -> None:
+                await sender.send(
+                    {
+                        "type": "approval_required",
+                        "request_id": req.request_id,
+                        "action_id": action_id,
+                        "tool_name": tool_name,
+                        "arguments": args,
+                    }
+                )
+
+            # ── Run LLM ───────────────────────────────────────────────────
 
             response = await run_llm(
                 bundle,
                 context.tools,
                 triggered_by=f"user:{req.user_id}",
-                on_tool_call=on_tool_call,
+                on_tool_start=on_tool_start,
+                on_tool_done=on_tool_done,
+                on_approval_required=on_approval_required,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                min_p=min_p,
+                repetition_penalty=repetition_penalty,
+                enable_thinking=enable_thinking,
+                thinking_budget=thinking_budget,
             )
 
             async with get_session() as db:
                 await conversation_manager.add_message(
-                    db, req.conversation_id, "assistant", response
+                    db, conversation_id, "assistant", response
                 )
 
+            latency_ms = int((time.monotonic() - t_start) * 1000)
             span.set_attribute("chat.response_length", len(response))
+            span.set_attribute("chat.latency_ms", latency_ms)
+
+            # ── response event ────────────────────────────────────────────
             await sender.send(
                 {
-                    "event_type": "chat_response",
+                    "type": "response",
                     "request_id": req.request_id,
-                    "conversation_id": req.conversation_id,
-                    "response": response,
+                    "conversation_id": conversation_id,
+                    "content": response,
+                }
+            )
+
+            # ── done event with metadata ──────────────────────────────────
+            episodic_for_metadata = [
+                {
+                    "summary": m.get("summary", ""),
+                    "started_at": m["started_at"].isoformat()
+                    if m.get("started_at")
+                    else None,
+                    "similarity_score": float(m.get("score", 0.0)),
+                }
+                for m in episodic_memories_raw
+            ]
+
+            await sender.send(
+                {
+                    "type": "done",
+                    "request_id": req.request_id,
+                    "metadata": {
+                        "thinking_tokens": 0,
+                        "response_tokens": 0,
+                        "prompt_tokens": 0,
+                        "latency_ms": latency_ms,
+                        "rag_sources": rag_sources,
+                        "episodic_memories": episodic_for_metadata,
+                    },
                 }
             )
 
@@ -157,23 +247,8 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
             span.record_exception(e)
             await sender.send(
                 {
-                    "event_type": "error",
+                    "type": "error",
                     "request_id": req.request_id,
-                    "error": str(e),
+                    "message": str(e),
                 }
             )
-
-
-def _make_tool_callback(sender: WSSender, request_id: str | None):
-    async def on_tool_call(tool_name: str, args: dict, result: dict) -> None:
-        await sender.send(
-            {
-                "event_type": "chat_tool_call",
-                "request_id": request_id,
-                "tool": tool_name,
-                "args": args,
-                "result": result,
-            }
-        )
-
-    return on_tool_call

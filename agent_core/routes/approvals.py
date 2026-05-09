@@ -9,6 +9,7 @@ from shared.models import ActionStatus
 from shared.db import get_db
 from shared.logger import logger
 from shared.schemas import (
+    ApproveRequest,
     PendingActionCreate,
     PendingActionPatch,
     PendingActionResponse,
@@ -42,17 +43,6 @@ async def list_approvals(
     return [PendingActionResponse.model_validate(a) for a in actions]
 
 
-@router.get("/approvals/{action_id}", response_model=PendingActionResponse)
-async def get_approval(
-    action_id: UUID,
-    session: AsyncSession = Depends(get_db),
-) -> PendingActionResponse:
-    action = await store.get_by_id(session, action_id)
-    if action is None:
-        raise HTTPException(status_code=404, detail="Action not found")
-    return PendingActionResponse.model_validate(action)
-
-
 @router.post("/approvals", response_model=PendingActionResponse, status_code=201)
 async def create_approval(
     body: PendingActionCreate,
@@ -67,6 +57,45 @@ async def create_approval(
         timeout_at=body.timeout_at,
         parent_id=body.parent_id,
     )
+    return PendingActionResponse.model_validate(action)
+
+
+# Static sub-paths must be registered before {action_id} to avoid shadowing
+@router.post("/approvals/reaction")
+async def handle_approval_reaction(
+    body: ApprovalReactionBody,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    from agent_core.agent.approval import manager
+
+    await manager.handle_reaction(session, body.reaction, body.message_ts, body.user_id)
+    return {}
+
+
+@router.post("/approvals/reply")
+async def handle_approval_reply(
+    body: ApprovalReplyBody,
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    from agent_core.agent.approval import manager
+
+    consumed, reply = await manager.handle_thread_reply(
+        session,
+        thread_ts=body.thread_ts,
+        text=body.text,
+        user_id=body.user_id,
+    )
+    return {"consumed": consumed, "reply": reply}
+
+
+@router.get("/approvals/{action_id}", response_model=PendingActionResponse)
+async def get_approval(
+    action_id: UUID,
+    session: AsyncSession = Depends(get_db),
+) -> PendingActionResponse:
+    action = await store.get_by_id(session, action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action not found")
     return PendingActionResponse.model_validate(action)
 
 
@@ -93,28 +122,71 @@ async def patch_approval(
     return PendingActionResponse.model_validate(action)
 
 
-@router.post("/approvals/reaction")
-async def handle_approval_reaction(
-    body: ApprovalReactionBody,
+@router.post("/approvals/{action_id}/approve", response_model=PendingActionResponse)
+async def approve_approval(
+    action_id: UUID,
+    body: ApproveRequest,
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> PendingActionResponse:
     from agent_core.agent.approval import manager
 
-    await manager.handle_reaction(session, body.reaction, body.message_ts, body.user_id)
-    return {}
+    action = await store.get_by_id(session, action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action not found")
+
+    terminal = {ActionStatus.completed, ActionStatus.rejected}
+    if action.status in terminal:
+        raise HTTPException(
+            status_code=409, detail=f"Action already in terminal state: {action.status}"
+        )
+
+    if body.edited_arguments:
+        action.payload = {**action.payload, "arguments": body.edited_arguments}
+
+    try:
+        await manager.approve_action(session, action, "web")
+    except Exception as e:
+        await session.rollback()
+        logger.error(
+            "approve_action_failed",
+            action_id=str(action_id),
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Approval execution failed")
+    await session.refresh(action)
+    return PendingActionResponse.model_validate(action)
 
 
-@router.post("/approvals/reply")
-async def handle_approval_reply(
-    body: ApprovalReplyBody,
+@router.post("/approvals/{action_id}/reject", response_model=PendingActionResponse)
+async def reject_approval(
+    action_id: UUID,
     session: AsyncSession = Depends(get_db),
-) -> dict:
+) -> PendingActionResponse:
     from agent_core.agent.approval import manager
 
-    consumed, reply = await manager.handle_thread_reply(
-        session,
-        thread_ts=body.thread_ts,
-        text=body.text,
-        user_id=body.user_id,
-    )
-    return {"consumed": consumed, "reply": reply}
+    action = await store.get_by_id(session, action_id)
+    if action is None:
+        raise HTTPException(status_code=404, detail="Action not found")
+
+    terminal = {ActionStatus.completed, ActionStatus.rejected}
+    if action.status in terminal:
+        raise HTTPException(
+            status_code=409, detail=f"Action already in terminal state: {action.status}"
+        )
+
+    try:
+        await manager.reject_action(session, action)
+    except Exception as e:
+        await session.rollback()
+        logger.error(
+            "reject_action_failed",
+            action_id=str(action_id),
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Rejection failed")
+    await session.refresh(action)
+    return PendingActionResponse.model_validate(action)
