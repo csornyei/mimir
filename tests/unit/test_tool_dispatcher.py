@@ -111,7 +111,7 @@ async def test_write_tool_injects_approval_pending_result(mocker):
 
     captured_messages: list[list[dict]] = []
 
-    async def capture_complete(messages, tools):
+    async def capture_complete(messages, tools, **kwargs):
         captured_messages.append(list(messages))
         if len(captured_messages) == 1:
             return _llm_response([_tool_call("write_mem", {})])

@@ -77,11 +77,13 @@ async def test_request_approval_creates_db_record_and_posts_to_slack(
     assert result is not None
 
 
-async def test_request_approval_does_not_create_record_if_slack_fails(
+async def test_request_approval_creates_record_with_fallback_ts_if_slack_fails(
     mocker, patch_slack
 ):
+    # Slack failure is best-effort — the DB record must still be created
     patch_slack.chat_postMessage.side_effect = RuntimeError("Slack down")
     mock_store = mocker.patch("agent_core.agent.approval.manager.store")
+    mock_store.create = AsyncMock(return_value=_make_action())
     mocker.patch(
         "agent_core.agent.approval.manager._format_approval_message",
         return_value="Approve?",
@@ -90,14 +92,14 @@ async def test_request_approval_does_not_create_record_if_slack_fails(
     session = AsyncMock()
     from agent_core.agent.approval import manager
 
-    with pytest.raises(RuntimeError):
-        await manager.request_approval(
-            session,
-            payload={"description": "do stuff", "content": "x", "operation": "append"},
-            triggered_by="user:U123",
-        )
+    result = await manager.request_approval(
+        session,
+        payload={"description": "do stuff", "content": "x", "operation": "append"},
+        triggered_by="user:U123",
+    )
 
-    mock_store.create.assert_not_called()
+    mock_store.create.assert_called_once()
+    assert result is not None
 
 
 # ---------------------------------------------------------------------------

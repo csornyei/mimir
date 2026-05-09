@@ -56,13 +56,28 @@ class LLMClient:
         tools: list[dict] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        top_p: float | None = None,
+        min_p: float | None = None,
+        repetition_penalty: float | None = None,
+        enable_thinking: bool | None = None,
+        thinking_budget: int | None = None,
         fallbacks: list[list[dict]] | None = None,
     ) -> dict:
         with _tracer.start_as_current_span("llm.complete") as span:
             span.set_attribute("llm.model", agent_config.llm_model)
             span.set_attribute("llm.tools_available", len(tools) if tools else 0)
             return await self._complete(
-                span, messages, tools, temperature, max_tokens, fallbacks
+                span,
+                messages,
+                tools,
+                temperature,
+                max_tokens,
+                top_p,
+                min_p,
+                repetition_penalty,
+                enable_thinking,
+                thinking_budget,
+                fallbacks,
             )
 
     async def _complete(
@@ -72,6 +87,11 @@ class LLMClient:
         tools: list[dict] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        top_p: float | None = None,
+        min_p: float | None = None,
+        repetition_penalty: float | None = None,
+        enable_thinking: bool | None = None,
+        thinking_budget: int | None = None,
         fallbacks: list[list[dict]] | None = None,
     ) -> dict:
         candidates = [messages] + (fallbacks or [])
@@ -79,12 +99,22 @@ class LLMClient:
 
         for attempt, msgs in enumerate(candidates):
             try:
-                payload = {
+                payload: dict = {
                     "model": agent_config.llm_model,
                     "messages": msgs,
                     "max_tokens": max_tokens or agent_config.llm_max_tokens,
                     "temperature": temperature or agent_config.llm_temperature,
                 }
+                if top_p is not None:
+                    payload["top_p"] = top_p
+                if min_p is not None:
+                    payload["min_p"] = min_p
+                if repetition_penalty is not None:
+                    payload["repetition_penalty"] = repetition_penalty
+                if enable_thinking is not None:
+                    payload["enable_thinking"] = enable_thinking
+                if thinking_budget is not None:
+                    payload["thinking_budget"] = thinking_budget
 
                 if tools:
                     payload["tools"] = tools

@@ -1,5 +1,6 @@
 from datetime import datetime, UTC
 
+from opentelemetry import trace
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,8 @@ from agent_core.prompts import (
 from shared.models import ConversationModel, EpisodicMemoryModel, MessageModel
 from agent_core.config import agent_config
 from shared.logger import logger
+
+_tracer = trace.get_tracer("mimir.memory.episodic")
 
 _CONSOLIDATION_MIN_MESSAGES = 5
 _RETRIEVAL_THRESHOLD = 0.6
