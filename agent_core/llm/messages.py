@@ -46,9 +46,13 @@ async def build_messages(
         system_tokens = token_estimate(system_prompt)
         n = calculate_window_size(system_tokens, config)
         if n < config.conversation_window_max:
-            logger.warning("conversation_window_reduced", n=n, system_tokens=system_tokens)
+            logger.warning(
+                "conversation_window_reduced", n=n, system_tokens=system_tokens
+            )
 
-        conversation_messages = await conversation_manager.window(db, conversation_id, n)
+        conversation_messages = await conversation_manager.window(
+            db, conversation_id, n
+        )
 
         span.set_attribute("prompt.system_tokens", system_tokens)
         span.set_attribute("prompt.window_size", n)
@@ -67,13 +71,13 @@ async def build_messages(
         )
 
         primary = [{"role": "system", "content": system_prompt}] + conversation_messages
-        fallback_reduced = (
-            [{"role": "system", "content": system_prompt_reduced}]
-            + conversation_messages[-5:]
-        )
-        fallback_minimal = (
-            [{"role": "system", "content": system_prompt_minimal}]
-            + conversation_messages[-config.conversation_window_min :]
-        )
+        fallback_reduced = [
+            {"role": "system", "content": system_prompt_reduced}
+        ] + conversation_messages[-5:]
+        fallback_minimal = [
+            {"role": "system", "content": system_prompt_minimal}
+        ] + conversation_messages[-config.conversation_window_min :]
 
-        return MessageBundle(primary=primary, fallbacks=[fallback_reduced, fallback_minimal])
+        return MessageBundle(
+            primary=primary, fallbacks=[fallback_reduced, fallback_minimal]
+        )
