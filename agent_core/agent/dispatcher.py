@@ -53,8 +53,5 @@ class ToolDispatcher:
                 span.set_status(StatusCode.ERROR, str(e))
                 return {"error": error_msg}
 
-    async def close(self) -> None:
-        pass
-
 
 tool_dispatcher = ToolDispatcher()

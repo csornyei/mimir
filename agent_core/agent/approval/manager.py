@@ -201,6 +201,7 @@ async def _handle_approve(
                 conversation_id=reinvoke_conv_id,
                 user_id=user_id,
                 message=reinvoke_message,
+                message_role="tool_result",
             )
             sent = web_conv_id and await ws_registry.send(
                 web_conv_id,

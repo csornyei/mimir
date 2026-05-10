@@ -39,7 +39,13 @@ class ConversationManager:
             .limit(n)
         )
         messages = result.scalars().all()
-        return [{"role": m.role, "content": m.content} for m in reversed(messages)]
+        return [
+            {
+                "role": "user" if m.role == "tool_result" else m.role,
+                "content": m.content,
+            }
+            for m in reversed(messages)
+        ]
 
 
 conversation_manager = ConversationManager()

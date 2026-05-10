@@ -93,7 +93,9 @@ class LLMClient:
             "model": agent_config.llm_model,
             "messages": messages,
             "max_tokens": max_tokens or agent_config.llm_max_tokens,
-            "temperature": temperature or agent_config.llm_temperature,
+            "temperature": (
+                temperature if temperature is not None else agent_config.llm_temperature
+            ),
         }
         if top_p is not None:
             payload["top_p"] = top_p
@@ -147,6 +149,7 @@ class LLMClient:
         messages: list[dict],
         on_token: Callable[[str], Awaitable[None]],
         on_thinking_token: Callable[[str], Awaitable[None]] | None = None,
+        on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -185,7 +188,7 @@ class LLMClient:
                     payload["stream"] = True
 
                     result = await self._stream_request(
-                        span, payload, on_token, on_thinking_token
+                        span, payload, on_token, on_thinking_token, on_tool_pending
                     )
                     if attempt > 0:
                         span.set_attribute("llm.fallback_attempt", attempt)
@@ -229,6 +232,7 @@ class LLMClient:
         payload: dict,
         on_token: Callable[[str], Awaitable[None]],
         on_thinking_token: Callable[[str], Awaitable[None]] | None,
+        on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> dict:
         """Execute one SSE streaming request and return the accumulated result."""
         in_think = False
@@ -262,17 +266,18 @@ class LLMClient:
                     continue
                 delta = choices[0].get("delta", {})
 
-                # Accumulate tool call deltas silently (no streaming to client)
+                # Accumulate tool call deltas; fire on_tool_pending on first chunk
                 for tc_delta in delta.get("tool_calls") or []:
                     idx: int = tc_delta.get("index", 0)
                     if idx not in tool_calls_acc:
+                        call_id = tc_delta.get("id", "")
+                        name = tc_delta.get("function", {}).get("name", "")
                         tool_calls_acc[idx] = {
-                            "id": tc_delta.get("id", ""),
-                            "function": {
-                                "name": tc_delta.get("function", {}).get("name", ""),
-                                "arguments": "",
-                            },
+                            "id": call_id,
+                            "function": {"name": name, "arguments": ""},
                         }
+                        if on_tool_pending and name:
+                            await on_tool_pending(name, call_id)
                     tool_calls_acc[idx]["function"]["arguments"] += tc_delta.get(
                         "function", {}
                     ).get("arguments", "")

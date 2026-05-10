@@ -9,6 +9,7 @@ class ChatRequest(BaseModel):
     conversation_id: str
     user_id: str
     message: str
+    message_role: str = "user"
 
 
 class ChatResponse(BaseModel):

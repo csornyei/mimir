@@ -317,17 +317,52 @@ export const useMimirStore = create<MimirStore>()(
                             return updates;
                         }
 
-                        case "tool_call": {
-                            const tc: ToolCall = {
+                        case "tool_pending": {
+                            // Pre-create the tool card as soon as the LLM names a tool during streaming
+                            const alreadyExists = last.toolCalls.some(
+                                (tc) => tc.call_id === event.call_id
+                            );
+                            if (alreadyExists) return {};
+                            const pending: ToolCall = {
                                 call_id: event.call_id,
                                 name: event.name,
-                                arguments: event.arguments,
+                                arguments: {},
                                 result: null,
                             };
                             msgs[lastIdx] = {
                                 ...last,
-                                toolCalls: [...last.toolCalls, tc],
+                                toolCalls: [...last.toolCalls, pending],
                             };
+                            return { messages: msgs };
+                        }
+
+                        case "tool_call": {
+                            // Update existing pending card if present, otherwise append
+                            const existingIdx = last.toolCalls.findIndex(
+                                (tc) => tc.call_id === event.call_id
+                            );
+                            if (existingIdx !== -1) {
+                                const updated = last.toolCalls.map((tc) =>
+                                    tc.call_id === event.call_id
+                                        ? { ...tc, arguments: event.arguments }
+                                        : tc
+                                );
+                                msgs[lastIdx] = {
+                                    ...last,
+                                    toolCalls: updated,
+                                };
+                            } else {
+                                const tc: ToolCall = {
+                                    call_id: event.call_id,
+                                    name: event.name,
+                                    arguments: event.arguments,
+                                    result: null,
+                                };
+                                msgs[lastIdx] = {
+                                    ...last,
+                                    toolCalls: [...last.toolCalls, tc],
+                                };
+                            }
                             return { messages: msgs };
                         }
 

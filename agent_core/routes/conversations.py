@@ -63,14 +63,17 @@ async def get_conversation(
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    total_result = await db.execute(
-        select(func.count()).where(MessageModel.conversation_id == conversation_id)
+    visible_filter = (
+        MessageModel.conversation_id == conversation_id,
+        MessageModel.role != "tool_result",
     )
+
+    total_result = await db.execute(select(func.count()).where(*visible_filter))
     total = total_result.scalar_one()
 
     messages_result = await db.execute(
         select(MessageModel)
-        .where(MessageModel.conversation_id == conversation_id)
+        .where(*visible_filter)
         .order_by(MessageModel.timestamp.asc())
         .limit(limit)
         .offset(offset)

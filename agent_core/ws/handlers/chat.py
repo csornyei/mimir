@@ -166,6 +166,17 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                         {"type": "thinking", "content": delta},
                     )
 
+                async def on_tool_pending(name: str, call_id: str) -> None:
+                    await ws_registry.send(
+                        conversation_id,
+                        {
+                            "type": "tool_pending",
+                            "request_id": req.request_id,
+                            "name": name,
+                            "call_id": call_id,
+                        },
+                    )
+
                 async def on_tool_start(name: str, args: dict, call_id: str) -> None:
                     await ws_registry.send(
                         conversation_id,
@@ -213,6 +224,7 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                     conversation_id=conversation_id,
                     on_token=on_token,
                     on_thinking_token=on_thinking_token,
+                    on_tool_pending=on_tool_pending,
                     on_tool_start=on_tool_start,
                     on_tool_done=on_tool_done,
                     on_approval_required=on_approval_required,

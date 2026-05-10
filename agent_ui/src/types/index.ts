@@ -82,6 +82,7 @@ export type ServerEvent =
           conversation_id?: string;
           request_id?: string | null;
       }
+    | { type: "tool_pending"; name: string; call_id: string }
     | {
           type: "tool_call";
           name: string;

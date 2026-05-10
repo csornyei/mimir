@@ -184,7 +184,6 @@ class CalDAVClient:
             results = calendar.search(end=end, todo=True)
             for todo in results:
                 for component in todo.icalendar_component.walk("VTODO"):
-                    print(component)
                     todos.append(self._parse_todo(component))
         return todos
 
@@ -199,9 +198,11 @@ class CalDAVClient:
             "uid": str(component.get("UID", "")),
             "summary": str(component.get("SUMMARY", "")),
             "due": _dt("DUE"),
-            "description": str(component.get("DESCRIPTION"))
-            if component.get("DESCRIPTION")
-            else None,
+            "description": (
+                str(component.get("DESCRIPTION"))
+                if component.get("DESCRIPTION")
+                else None
+            ),
             "status": str(component.get("STATUS")) if component.get("STATUS") else None,
         }
 
@@ -217,12 +218,14 @@ class CalDAVClient:
             "summary": str(component.get("SUMMARY", "")),
             "start": _dt("DTSTART"),
             "end": _dt("DTEND"),
-            "description": str(component.get("DESCRIPTION"))
-            if component.get("DESCRIPTION")
-            else None,
-            "location": str(component.get("LOCATION"))
-            if component.get("LOCATION")
-            else None,
+            "description": (
+                str(component.get("DESCRIPTION"))
+                if component.get("DESCRIPTION")
+                else None
+            ),
+            "location": (
+                str(component.get("LOCATION")) if component.get("LOCATION") else None
+            ),
         }
 
 

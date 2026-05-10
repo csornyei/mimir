@@ -34,6 +34,7 @@ class ToolLoop(ToolDispatcher):
         conversation_id: str | None = None,
         on_token: Callable[[str], Awaitable[None]] | None = None,
         on_thinking_token: Callable[[str], Awaitable[None]] | None = None,
+        on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
         # Legacy combined callback kept for backward compat (fires after execution)
         on_tool_call: Callable[[str, dict, dict], Awaitable[None]] | None = None,
         # New separate callbacks
@@ -70,6 +71,7 @@ class ToolLoop(ToolDispatcher):
                         messages=messages,
                         on_token=on_token,
                         on_thinking_token=on_thinking_token,
+                        on_tool_pending=on_tool_pending,
                         tools=tools,
                         temperature=temperature,
                         max_tokens=max_tokens,
@@ -245,6 +247,7 @@ class ToolLoop(ToolDispatcher):
                             messages=messages,
                             on_token=on_token,
                             on_thinking_token=on_thinking_token,
+                            on_tool_pending=on_tool_pending,
                             tools=tools,
                             temperature=temperature,
                             max_tokens=max_tokens,

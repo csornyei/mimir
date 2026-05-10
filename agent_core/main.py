@@ -9,7 +9,6 @@ from agent_core.config import agent_config
 from shared.db import initialize_db, dispose_db
 from shared.logger import logger
 from agent_core.llm.client import llm_client
-from agent_core.memory.semantic import SemanticMemory
 from agent_core.rag.watcher import AsyncFileWatcher
 from agent_core.routes.approvals import router as approvals_router
 from agent_core.routes.brief import router as brief_router
@@ -54,8 +53,6 @@ app.include_router(memory_router, prefix="/api", tags=["memory"])
 app.include_router(digest_router, prefix="/api", tags=["digest"])
 app.include_router(brief_router, prefix="/api", tags=["brief"])
 app.add_api_websocket_route("/ws", ws_endpoint)
-
-semantic_memory = SemanticMemory()
 
 
 @app.get("/health")

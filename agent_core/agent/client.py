@@ -10,6 +10,7 @@ async def send_to_agent(
     conversation_id: str,
     user_id: str,
     message: str,
+    message_role: str = "user",
 ) -> str:
     """POST to /api/chat and return the response text."""
     async with httpx.AsyncClient(timeout=120) as client:
@@ -17,6 +18,7 @@ async def send_to_agent(
             conversation_id=conversation_id,
             message=message,
             user_id=user_id,
+            message_role=message_role,
         )
 
         logger.debug(
