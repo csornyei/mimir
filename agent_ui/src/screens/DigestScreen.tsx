@@ -12,58 +12,55 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-
-interface DigestArticle {
-    id: number;
-    title: string;
-    url: string;
-    feed_name: string | null;
-    category: string | null;
-    window: string;
-    digest_run_at: string;
-}
+import type { DigestArticle, DigestRun } from "@/types";
 
 type Ratings = Record<number, "up" | "down">;
 
-function groupByRun(articles: DigestArticle[]): [string, DigestArticle[]][] {
-    const map = new Map<string, DigestArticle[]>();
-    for (const a of articles) {
-        const existing = map.get(a.digest_run_at) ?? [];
-        existing.push(a);
-        map.set(a.digest_run_at, existing);
-    }
-    return Array.from(map.entries());
+function formatRunLabel(run: DigestRun): string {
+    const date = new Date(run.run_at).toISOString().slice(0, 10);
+    return `${date}: ${run.window}`;
 }
 
 export function DigestScreen() {
-    const [latest, setLatest] = useState<DigestArticle[]>([]);
-    const [pastGroups, setPastGroups] = useState<[string, DigestArticle[]][]>(
-        []
-    );
+    const [runs, setRuns] = useState<DigestRun[]>([]);
+    const [articlesByRun, setArticlesByRun] = useState<
+        Record<string, DigestArticle[]>
+    >({});
     const [ratings, setRatings] = useState<Ratings>({});
     const [loading, setLoading] = useState(true);
 
+    async function fetchRunArticles(runAt: string): Promise<DigestArticle[]> {
+        const res = await fetch(
+            `/api/digest/run?run_at=${encodeURIComponent(runAt)}`
+        );
+        if (!res.ok) throw new Error("Failed to load run");
+        return res.json() as Promise<DigestArticle[]>;
+    }
+
     useEffect(() => {
-        Promise.all([
-            fetch("/api/digest/latest").then(
-                (r) => r.json() as Promise<DigestArticle[]>
-            ),
-            fetch("/api/digest/history?limit=100").then(
-                (r) => r.json() as Promise<DigestArticle[]>
-            ),
-        ])
-            .then(([latestArticles, historyArticles]) => {
-                setLatest(latestArticles);
-                const latestRunAt = latestArticles[0]?.digest_run_at;
-                const olderArticles = historyArticles.filter(
-                    (a) => a.digest_run_at !== latestRunAt
-                );
-                setPastGroups(groupByRun(olderArticles));
-                // TODO: persist ratings via localStorage
+        fetch("/api/digest/runs")
+            .then((r) => r.json() as Promise<DigestRun[]>)
+            .then(async (fetchedRuns) => {
+                setRuns(fetchedRuns);
+                if (fetchedRuns.length > 0) {
+                    const latest = fetchedRuns[0];
+                    const articles = await fetchRunArticles(latest.run_at);
+                    setArticlesByRun({ [latest.run_at]: articles });
+                }
             })
             .catch(() => toast.error("Failed to load digest"))
             .finally(() => setLoading(false));
     }, []);
+
+    async function handleExpand(run: DigestRun) {
+        if (articlesByRun[run.run_at]) return;
+        try {
+            const articles = await fetchRunArticles(run.run_at);
+            setArticlesByRun((prev) => ({ ...prev, [run.run_at]: articles }));
+        } catch {
+            toast.error("Failed to load digest run");
+        }
+    }
 
     async function handleFeedback(articleId: number, rating: "up" | "down") {
         setRatings((r) => ({ ...r, [articleId]: rating }));
@@ -84,16 +81,17 @@ export function DigestScreen() {
         }
     }
 
-    const latestMeta = latest[0];
+    const latestRun = runs[0];
+    const pastRuns = runs.slice(1);
 
     return (
         <div className="flex h-full flex-col overflow-hidden">
             <div className="border-border shrink-0 border-b px-6 py-4">
                 <h1 className="text-base font-semibold">RSS Digest</h1>
-                {latestMeta && (
+                {latestRun && (
                     <p className="text-muted-foreground mt-1 text-xs">
-                        {latestMeta.window} ·{" "}
-                        {new Date(latestMeta.digest_run_at).toLocaleString()}
+                        {formatRunLabel(latestRun)} · {latestRun.article_count}{" "}
+                        articles
                     </p>
                 )}
             </div>
@@ -109,47 +107,57 @@ export function DigestScreen() {
                                 />
                             ))}
                         </div>
-                    ) : latest.length > 0 ? (
+                    ) : !latestRun ? (
+                        <p className="text-muted-foreground pt-8 text-center text-sm">
+                            No digest yet.
+                        </p>
+                    ) : (
                         <>
                             <div className="mb-8 space-y-3">
-                                {latest.map((article) => (
-                                    <ArticleCard
-                                        key={article.id}
-                                        article={article}
-                                        rating={ratings[article.id]}
-                                        onFeedback={handleFeedback}
-                                    />
-                                ))}
+                                {(articlesByRun[latestRun.run_at] ?? []).map(
+                                    (article) => (
+                                        <ArticleCard
+                                            key={article.id}
+                                            article={article}
+                                            rating={ratings[article.id]}
+                                            onFeedback={handleFeedback}
+                                        />
+                                    )
+                                )}
                             </div>
 
-                            {pastGroups.length > 0 && (
+                            {pastRuns.length > 0 && (
                                 <>
                                     <Separator className="my-4" />
                                     <h2 className="mb-3 text-sm font-semibold">
                                         Past Digests
                                     </h2>
                                     <div className="space-y-2">
-                                        {pastGroups.map(([runAt, articles]) => (
-                                            <Collapsible key={runAt}>
+                                        {pastRuns.map((run) => (
+                                            <Collapsible
+                                                key={run.run_at}
+                                                onOpenChange={(open) => {
+                                                    if (open) handleExpand(run);
+                                                }}
+                                            >
                                                 <CollapsibleTrigger className="bg-card border-border hover:bg-muted/30 flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors">
                                                     <span className="text-foreground">
-                                                        {new Date(
-                                                            runAt
-                                                        ).toLocaleDateString()}
-                                                    </span>
-                                                    <span className="text-muted-foreground text-xs">
-                                                        {articles[0]?.window}
+                                                        {formatRunLabel(run)}
                                                     </span>
                                                     <span className="text-muted-foreground ml-auto text-xs">
-                                                        {articles.length}{" "}
+                                                        {run.article_count}{" "}
                                                         articles
                                                     </span>
                                                     <CaretDown className="text-muted-foreground h-4 w-4 shrink-0" />
                                                 </CollapsibleTrigger>
                                                 <CollapsibleContent>
                                                     <div className="space-y-2 pt-2 pb-1">
-                                                        {articles.map(
-                                                            (article) => (
+                                                        {articlesByRun[
+                                                            run.run_at
+                                                        ] ? (
+                                                            articlesByRun[
+                                                                run.run_at
+                                                            ].map((article) => (
                                                                 <ArticleCard
                                                                     key={
                                                                         article.id
@@ -167,7 +175,9 @@ export function DigestScreen() {
                                                                         handleFeedback
                                                                     }
                                                                 />
-                                                            )
+                                                            ))
+                                                        ) : (
+                                                            <Skeleton className="h-20 w-full rounded-lg" />
                                                         )}
                                                     </div>
                                                 </CollapsibleContent>
@@ -177,10 +187,6 @@ export function DigestScreen() {
                                 </>
                             )}
                         </>
-                    ) : (
-                        <p className="text-muted-foreground pt-8 text-center text-sm">
-                            No digest yet.
-                        </p>
                     )}
                 </div>
             </ScrollArea>

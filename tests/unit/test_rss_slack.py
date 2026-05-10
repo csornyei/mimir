@@ -46,7 +46,7 @@ async def test_post_pick_returns_ts():
     }
 
     with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
-        ts = await post_pick("C123", "111.222", pick)
+        ts = await post_pick("C123", "111.222", pick, pick["url"])
 
     assert ts == "333.444"
 
@@ -65,7 +65,7 @@ async def test_post_pick_posts_to_thread():
     }
 
     with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
-        await post_pick("C123", "111.222", pick)
+        await post_pick("C123", "111.222", pick, pick["url"])
 
     call_kwargs = mock_client.chat_postMessage.call_args.kwargs
     assert call_kwargs["channel"] == "C123"
@@ -86,7 +86,7 @@ async def test_post_pick_message_contains_title_and_reason():
     }
 
     with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
-        await post_pick("C123", "111.222", pick)
+        await post_pick("C123", "111.222", pick, pick["url"])
 
     call_kwargs = mock_client.chat_postMessage.call_args.kwargs
     assert "Great Article" in call_kwargs["text"]
@@ -107,7 +107,7 @@ async def test_post_pick_handles_missing_reason():
     }  # no reason
 
     with patch("agent_core.scheduler.rss.job.AsyncWebClient", return_value=mock_client):
-        ts = await post_pick("C123", "111.222", pick)
+        ts = await post_pick("C123", "111.222", pick, pick["url"])
 
     assert ts == "333.444"
     call_kwargs = mock_client.chat_postMessage.call_args.kwargs

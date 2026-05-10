@@ -5,6 +5,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 
 from agent_core.config import agent_config
 from shared.db import get_session
+from shared.external.ntfy import send_ntfy
 from shared.external.rss.client import RSSClient
 from shared.logger import logger
 from agent_core.memory.semantic import SemanticMemory
@@ -27,9 +28,10 @@ async def post_digest_header(channel_id: str, n_scanned: int, n_picks: int) -> s
     return response["ts"]
 
 
-async def post_pick(channel_id: str, thread_ts: str, pick: dict[str, Any]) -> str:
+async def post_pick(
+    channel_id: str, thread_ts: str, pick: dict[str, Any], url: str
+) -> str:
     title = pick.get("title") or "(no title)"
-    url = pick.get("url") or ""
     reason = pick.get("reason", "")
     text = f"<{url}|{title}>\n_{reason}_" if url else f"{title}\n_{reason}_"
     slack = AsyncWebClient(token=agent_config.slack_bot_token)
@@ -110,16 +112,21 @@ async def run_digest(
             if pick_id not in entries_by_id:
                 logger.warning("rss_digest_pick_id_not_found", pick_id=pick_id)
                 continue
-            message_ts = await post_pick(
-                agent_config.newspaper_channel_id, thread_ts, pick
-            )
             source = entries_by_id[pick_id]
+            raw_url = source.get("url", "")
+            if raw_url.startswith("https"):
+                verified_url = raw_url
+            else:
+                verified_url = f"{agent_config.miniflux_url}/unread/entry/{pick_id}"
+            message_ts = await post_pick(
+                agent_config.newspaper_channel_id, thread_ts, pick, verified_url
+            )
             async with get_session() as session:
                 session.add(
                     RssDigestEntry(
                         miniflux_entry_id=pick_id,
                         title=pick.get("title", ""),
-                        url=pick.get("url", ""),
+                        url=verified_url,
                         feed_name=source.get("feed_name"),
                         category=source.get("category"),
                         digest_run_at=now,
@@ -136,6 +143,22 @@ async def run_digest(
             pick_count=len(picks),
         )
 
+        if agent_config.ntfy_url and agent_config.ntfy_digest_topic:
+            click = (
+                f"{agent_config.mimir_host}/digest" if agent_config.mimir_host else None
+            )
+            await send_ntfy(
+                url=agent_config.ntfy_url,
+                topic=agent_config.ntfy_digest_topic,
+                message=(
+                    f"Mimir: new reads digest for {window_label}. "
+                    f"Scanned {len(entries)} articles and selected {len(picks)} for you!"
+                ),
+                title="Mimir - News Digest",
+                click_url=click,
+                tags="newspaper_roll",
+            )
+
     except Exception as e:
         logger.error(
             "rss_digest_failed",
@@ -144,3 +167,21 @@ async def run_digest(
             error_type=type(e).__name__,
             exc_info=True,
         )
+
+
+if __name__ == "__main__":
+    import asyncio
+    from shared.db import initialize_db, dispose_db
+    from shared.config import shared_config
+
+    async def main():
+        initialize_db(shared_config.database_url)
+
+        now = datetime.now(UTC)
+        window_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        window_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        await run_digest(window_start, window_end, "today")
+
+        await dispose_db()
+
+    asyncio.run(main())

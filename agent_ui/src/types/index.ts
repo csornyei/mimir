@@ -71,6 +71,42 @@ export interface ConversationSummary {
     title?: string;
 }
 
+export interface DigestArticle {
+    id: number;
+    title: string;
+    url: string;
+    feed_name: string | null;
+    category: string | null;
+    window: string;
+    digest_run_at: string;
+}
+
+export interface DigestRun {
+    run_at: string;
+    window: string;
+    article_count: number;
+}
+
+export interface BriefMessage {
+    id: number;
+    role: "user" | "assistant";
+    content: string;
+    timestamp: string;
+}
+
+export interface BriefSummary {
+    id: string;
+    date: string;
+    created_at: string;
+}
+
+export interface BriefDetail {
+    id: string;
+    date: string;
+    created_at: string;
+    messages: BriefMessage[];
+}
+
 // Server → Client
 export type ServerEvent =
     | { type: "connected" }

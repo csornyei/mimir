@@ -134,6 +134,28 @@ class DigestArticle(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class DigestRun(BaseModel):
+    run_at: datetime
+    window: str
+    article_count: int
+
+
 class DigestFeedbackRequest(BaseModel):
     article_id: int
     rating: Literal["up", "down"]
+
+
+# ── Brief ─────────────────────────────────────────────────────────────────────
+
+
+class BriefSummary(BaseModel):
+    id: str
+    date: str
+    created_at: datetime
+
+
+class BriefDetail(BaseModel):
+    id: str
+    date: str
+    created_at: datetime
+    messages: list[MessageResponse]

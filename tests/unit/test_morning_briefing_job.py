@@ -41,15 +41,42 @@ SAMPLE_EVENTS = [
 
 @pytest.mark.asyncio
 async def test_run_morning_briefing_skips_when_channel_id_missing():
+    agent_cfg = _make_agent_config(morning_brief_channel_id=None)
+    mock_dav_instance = AsyncMock()
+    mock_dav_instance.get_events.return_value = []
+    mock_dav_instance.get_todos.return_value = []
+    mock_slack_instance = AsyncMock()
+    mock_session = AsyncMock()
+
     with (
         patch(
             "agent_core.scheduler.briefing.job.agent_config",
-            _make_agent_config(morning_brief_channel_id=None),
+            agent_cfg,
         ),
-        patch("agent_core.scheduler.briefing.job.CalDAVClient") as mock_dav,
+        patch(
+            "agent_core.scheduler.briefing.job.CalDAVClient",
+            return_value=mock_dav_instance,
+        ),
+        patch("agent_core.scheduler.briefing.job.llm_client") as mock_llm,
+        patch(
+            "agent_core.scheduler.briefing.job.AsyncWebClient",
+            return_value=mock_slack_instance,
+        ),
+        patch("agent_core.scheduler.briefing.job.get_session") as mock_session_ctx,
+        patch("agent_core.scheduler.briefing.job.conversation_manager"),
     ):
+        mock_llm.complete = AsyncMock(
+            return_value={
+                "content": "Good morning!",
+                "tool_calls": [],
+                "finish_reason": "stop",
+            }
+        )
+        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
         await run_morning_briefing()
-        mock_dav.assert_not_called()
+
+    mock_slack_instance.chat_postMessage.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -96,7 +123,9 @@ async def test_run_morning_briefing_posts_llm_response_to_slack():
     agent_cfg = _make_agent_config()
     mock_dav_instance = AsyncMock()
     mock_dav_instance.get_events.return_value = SAMPLE_EVENTS
+    mock_dav_instance.get_todos.return_value = []
     mock_slack_instance = AsyncMock()
+    mock_session = AsyncMock()
 
     with (
         patch("agent_core.scheduler.briefing.job.agent_config", agent_cfg),
@@ -109,6 +138,11 @@ async def test_run_morning_briefing_posts_llm_response_to_slack():
             "agent_core.scheduler.briefing.job.AsyncWebClient",
             return_value=mock_slack_instance,
         ),
+        patch("agent_core.scheduler.briefing.job.get_session") as mock_session_ctx,
+        patch(
+            "agent_core.scheduler.briefing.job.conversation_manager",
+            new_callable=AsyncMock,
+        ),
     ):
         mock_llm.complete = AsyncMock(
             return_value={
@@ -117,6 +151,8 @@ async def test_run_morning_briefing_posts_llm_response_to_slack():
                 "finish_reason": "stop",
             }
         )
+        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
         await run_morning_briefing()
 
     mock_slack_instance.chat_postMessage.assert_called_once_with(

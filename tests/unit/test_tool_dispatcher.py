@@ -68,7 +68,7 @@ async def test_write_tool_requests_approval_not_dispatch(mocker):
     call_kwargs = approval_mock.call_args.kwargs
     assert call_kwargs["payload"]["tool_name"] == "restricted_tool"
     assert call_kwargs["triggered_by"] == "user:U123"
-    assert result == "Approval requested for you."
+    assert result[0] == "Approval requested for you."
 
 
 @pytest.mark.asyncio
@@ -100,7 +100,7 @@ async def test_read_tool_dispatches_directly(mocker):
         )
 
     dispatch_mock.assert_awaited_once()
-    assert result == "No pods running."
+    assert result[0] == "No pods running."
 
 
 @pytest.mark.asyncio

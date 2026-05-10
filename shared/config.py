@@ -24,5 +24,11 @@ class SharedConfig(BaseSettings):
 
     weather_config_path: Optional[str] = None
 
+    ntfy_url: Optional[str] = None
+    ntfy_digest_topic: Optional[str] = None
+    ntfy_morning_brief_topic: Optional[str] = None
+    ntfy_messages_topic: Optional[str] = None
+    mimir_host: Optional[str] = None
+
 
 shared_config = SharedConfig()
