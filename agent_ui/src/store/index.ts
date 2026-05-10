@@ -289,6 +289,25 @@ export const useMimirStore = create<MimirStore>()(
               return { messages: msgs, pendingApprovals: [...s.pendingApprovals, event.action_id] }
             }
 
+            case 'approval_result': {
+              const { action_id: actionId, status, result, error } = event
+              const timers = _approvalTimers.get(actionId)
+              if (timers) { clearTimeout(timers[0]); clearTimeout(timers[1]); _approvalTimers.delete(actionId) }
+              if (status === 'completed') toast.success('Action completed')
+              else if (status === 'failed') toast.error(`Action failed: ${error ?? 'unknown error'}`)
+              else if (status === 'rejected') toast.info('Action rejected')
+              else if (status === 'timeout') toast.warning('Approval timed out')
+              void result
+              return {
+                messages: s.messages.map((m) =>
+                  m.approvalCard?.action_id === actionId
+                    ? { ...m, approvalCard: { ...m.approvalCard!, status } }
+                    : m
+                ),
+                pendingApprovals: s.pendingApprovals.filter((id) => id !== actionId),
+              }
+            }
+
             case 'error':
               toast.error(event.message)
               msgs[lastIdx] = { ...last, isStreaming: false }

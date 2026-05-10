@@ -43,7 +43,7 @@ export interface ApprovalCard {
   action_id: string
   tool_name: string
   arguments: Record<string, unknown>
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'completed' | 'failed' | 'rejected' | 'timeout'
 }
 
 export interface Message {
@@ -74,6 +74,7 @@ export type ServerEvent =
   | { type: 'tool_call'; name: string; arguments: Record<string, unknown>; call_id: string }
   | { type: 'tool_result'; name: string; result: string; call_id: string }
   | { type: 'approval_required'; action_id: string; tool_name: string; arguments: Record<string, unknown> }
+  | { type: 'approval_result'; action_id: string; status: 'completed' | 'failed' | 'rejected' | 'timeout'; result?: string; error?: string }
   | { type: 'error'; message: string }
   | { type: 'done'; metadata: ResponseMetadata; request_id?: string | null }
 

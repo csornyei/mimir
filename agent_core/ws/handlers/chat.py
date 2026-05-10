@@ -13,6 +13,7 @@ from agent_core.llm.prompt import format_episodic_context
 from agent_core.memory.episodic import EpisodicMemory
 from agent_core.memory.semantic import SemanticMemory
 from agent_core.rag.context import retrieve_rag_context
+from agent_core.ws import registry as ws_registry
 from agent_core.ws.sender import WSSender
 from shared.db import get_session
 from shared.logger import logger
@@ -78,6 +79,7 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
         thinking_budget = settings.thinking_budget if settings else None
 
         t_start = time.monotonic()
+        _conv_id: str | None = None
 
         try:
             # Ensure conversation exists; create if null
@@ -97,144 +99,156 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                 )
 
             span.set_attribute("chat.resolved_conversation_id", conversation_id)
-
-            semantic_memory_content = _semantic_memory.read()
-
-            async with get_session() as db:
-                rag_context, _chunks_used, rag_sources = await retrieve_rag_context(
-                    req.message, db, agent_config.rag_max_tokens
-                )
-                episodic_memories_raw = await EpisodicMemory(db).retrieve(
-                    req.message, k=agent_config.episodic_retrieval_k
-                )
-
-            episodic_context = format_episodic_context(episodic_memories_raw)
+            _conv_id = conversation_id
+            ws_registry.register(conversation_id, sender)
 
             try:
-                tools = await tool_schema_registry.get_tools()
-                logger.debug("fetched_tools", count=len(tools))
-            except Exception as e:
-                logger.warning(
-                    "failed_to_fetch_tools",
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    fallback="proceeding_without_tools",
-                    exc_info=True,
+                semantic_memory_content = _semantic_memory.read()
+
+                async with get_session() as db:
+                    rag_context, _chunks_used, rag_sources = await retrieve_rag_context(
+                        req.message, db, agent_config.rag_max_tokens
+                    )
+                    episodic_memories_raw = await EpisodicMemory(db).retrieve(
+                        req.message, k=agent_config.episodic_retrieval_k
+                    )
+
+                episodic_context = format_episodic_context(episodic_memories_raw)
+
+                try:
+                    tools = await tool_schema_registry.get_tools()
+                    logger.debug("fetched_tools", count=len(tools))
+                except Exception as e:
+                    logger.warning(
+                        "failed_to_fetch_tools",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        fallback="proceeding_without_tools",
+                        exc_info=True,
+                    )
+                    tools = []
+
+                context = ChatContext(
+                    semantic_memory=semantic_memory_content,
+                    rag_context=rag_context,
+                    episodic_context=episodic_context,
+                    tools=tools,
                 )
-                tools = []
 
-            context = ChatContext(
-                semantic_memory=semantic_memory_content,
-                rag_context=rag_context,
-                episodic_context=episodic_context,
-                tools=tools,
-            )
+                async with get_session() as db:
+                    bundle = await build_messages(
+                        context, conversation_id, db, agent_config
+                    )
 
-            async with get_session() as db:
-                bundle = await build_messages(
-                    context, conversation_id, db, agent_config
+                # ── WS event callbacks ─────────────────────────────────────────
+
+                async def on_tool_start(name: str, args: dict, call_id: str) -> None:
+                    await ws_registry.send(
+                        conversation_id,
+                        {
+                            "type": "tool_call",
+                            "request_id": req.request_id,
+                            "name": name,
+                            "arguments": args,
+                            "call_id": call_id,
+                        },
+                    )
+
+                async def on_tool_done(name: str, result: str, call_id: str) -> None:
+                    await ws_registry.send(
+                        conversation_id,
+                        {
+                            "type": "tool_result",
+                            "request_id": req.request_id,
+                            "name": name,
+                            "result": result,
+                            "call_id": call_id,
+                        },
+                    )
+
+                async def on_approval_required(
+                    action_id: str, tool_name: str, args: dict
+                ) -> None:
+                    await ws_registry.send(
+                        conversation_id,
+                        {
+                            "type": "approval_required",
+                            "request_id": req.request_id,
+                            "action_id": action_id,
+                            "tool_name": tool_name,
+                            "arguments": args,
+                        },
+                    )
+
+                # ── Run LLM ───────────────────────────────────────────────────
+
+                response = await run_llm(
+                    bundle,
+                    context.tools,
+                    triggered_by=f"user:{req.user_id}",
+                    conversation_id=conversation_id,
+                    on_tool_start=on_tool_start,
+                    on_tool_done=on_tool_done,
+                    on_approval_required=on_approval_required,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    top_p=top_p,
+                    min_p=min_p,
+                    repetition_penalty=repetition_penalty,
+                    enable_thinking=enable_thinking,
+                    thinking_budget=thinking_budget,
                 )
 
-            # ── WS event callbacks ─────────────────────────────────────────
+                async with get_session() as db:
+                    await conversation_manager.add_message(
+                        db, conversation_id, "assistant", response
+                    )
 
-            async def on_tool_start(name: str, args: dict, call_id: str) -> None:
-                await sender.send(
+                latency_ms = int((time.monotonic() - t_start) * 1000)
+                span.set_attribute("chat.response_length", len(response))
+                span.set_attribute("chat.latency_ms", latency_ms)
+
+                # ── response event ────────────────────────────────────────────
+                await ws_registry.send(
+                    conversation_id,
                     {
-                        "type": "tool_call",
+                        "type": "response",
                         "request_id": req.request_id,
-                        "name": name,
-                        "arguments": args,
-                        "call_id": call_id,
-                    }
-                )
-
-            async def on_tool_done(name: str, result: str, call_id: str) -> None:
-                await sender.send(
-                    {
-                        "type": "tool_result",
-                        "request_id": req.request_id,
-                        "name": name,
-                        "result": result,
-                        "call_id": call_id,
-                    }
-                )
-
-            async def on_approval_required(
-                action_id: str, tool_name: str, args: dict
-            ) -> None:
-                await sender.send(
-                    {
-                        "type": "approval_required",
-                        "request_id": req.request_id,
-                        "action_id": action_id,
-                        "tool_name": tool_name,
-                        "arguments": args,
-                    }
-                )
-
-            # ── Run LLM ───────────────────────────────────────────────────
-
-            response = await run_llm(
-                bundle,
-                context.tools,
-                triggered_by=f"user:{req.user_id}",
-                on_tool_start=on_tool_start,
-                on_tool_done=on_tool_done,
-                on_approval_required=on_approval_required,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                top_p=top_p,
-                min_p=min_p,
-                repetition_penalty=repetition_penalty,
-                enable_thinking=enable_thinking,
-                thinking_budget=thinking_budget,
-            )
-
-            async with get_session() as db:
-                await conversation_manager.add_message(
-                    db, conversation_id, "assistant", response
-                )
-
-            latency_ms = int((time.monotonic() - t_start) * 1000)
-            span.set_attribute("chat.response_length", len(response))
-            span.set_attribute("chat.latency_ms", latency_ms)
-
-            # ── response event ────────────────────────────────────────────
-            await sender.send(
-                {
-                    "type": "response",
-                    "request_id": req.request_id,
-                    "conversation_id": conversation_id,
-                    "content": response,
-                }
-            )
-
-            # ── done event with metadata ──────────────────────────────────
-            episodic_for_metadata = [
-                {
-                    "summary": m.get("summary", ""),
-                    "started_at": m["started_at"].isoformat()
-                    if m.get("started_at")
-                    else None,
-                    "similarity_score": float(m.get("score", 0.0)),
-                }
-                for m in episodic_memories_raw
-            ]
-
-            await sender.send(
-                {
-                    "type": "done",
-                    "request_id": req.request_id,
-                    "metadata": {
-                        "thinking_tokens": 0,
-                        "response_tokens": 0,
-                        "prompt_tokens": 0,
-                        "latency_ms": latency_ms,
-                        "rag_sources": rag_sources,
-                        "episodic_memories": episodic_for_metadata,
+                        "conversation_id": conversation_id,
+                        "content": response,
                     },
-                }
-            )
+                )
+
+                # ── done event with metadata ──────────────────────────────────
+                episodic_for_metadata = [
+                    {
+                        "summary": m.get("summary", ""),
+                        "started_at": m["started_at"].isoformat()
+                        if m.get("started_at")
+                        else None,
+                        "similarity_score": float(m.get("score", 0.0)),
+                    }
+                    for m in episodic_memories_raw
+                ]
+
+                await ws_registry.send(
+                    conversation_id,
+                    {
+                        "type": "done",
+                        "request_id": req.request_id,
+                        "metadata": {
+                            "thinking_tokens": 0,
+                            "response_tokens": 0,
+                            "prompt_tokens": 0,
+                            "latency_ms": latency_ms,
+                            "rag_sources": rag_sources,
+                            "episodic_memories": episodic_for_metadata,
+                        },
+                    },
+                )
+
+            finally:
+                ws_registry.unregister(conversation_id)
 
         except Exception as e:
             logger.error(
@@ -245,10 +259,12 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                 exc_info=True,
             )
             span.record_exception(e)
-            await sender.send(
-                {
-                    "type": "error",
-                    "request_id": req.request_id,
-                    "message": str(e),
-                }
-            )
+            err_payload = {
+                "type": "error",
+                "request_id": req.request_id,
+                "message": str(e),
+            }
+            if _conv_id:
+                await ws_registry.send(_conv_id, err_payload)
+            else:
+                await sender.send(err_payload)

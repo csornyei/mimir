@@ -31,6 +31,7 @@ class ToolLoop(ToolDispatcher):
         tools: list[dict],
         max_steps: int | None = None,
         triggered_by: str = "agent",
+        conversation_id: str | None = None,
         # Legacy combined callback kept for backward compat (fires after execution)
         on_tool_call: Callable[[str, dict, dict], Awaitable[None]] | None = None,
         # New separate callbacks
@@ -153,7 +154,7 @@ class ToolLoop(ToolDispatcher):
 
                     if _is_write_tool(tool_name, tools):
                         result, action_id = await self._request_write_approval(
-                            tool_name, args, triggered_by
+                            tool_name, args, triggered_by, conversation_id
                         )
                         approval_requested = True
                         if on_approval_required is not None and action_id:
@@ -245,17 +246,23 @@ class ToolLoop(ToolDispatcher):
             )
 
     async def _request_write_approval(
-        self, tool_name: str, args: dict[str, Any], triggered_by: str
+        self,
+        tool_name: str,
+        args: dict[str, Any],
+        triggered_by: str,
+        conversation_id: str | None = None,
     ) -> tuple[dict[str, Any], str | None]:
         """Request approval for a write tool. Returns (result_dict, action_id)."""
         from agent_core.agent.approval import manager as approval_manager
 
         description = f"call `{tool_name}` with: {args}"
-        payload = {
+        payload: dict[str, Any] = {
             "tool_name": tool_name,
             "arguments": args,
             "description": description,
         }
+        if conversation_id:
+            payload["web_conversation_id"] = conversation_id
         try:
             async with get_session() as session:
                 action = await approval_manager.request_approval(
