@@ -1,7 +1,7 @@
 from typing import Any
 
 import kr8s.asyncio
-from kr8s.objects import Pod
+from kr8s.asyncio.objects import Pod
 
 from shared.logger import logger
 from mcp_server.decorators import traced_tool, write_tool
@@ -159,8 +159,26 @@ async def deploy_pod(
 ) -> dict[str, Any]:
     """Deploy a pod with the given name and image. Returns the created pod's metadata."""
     logger.debug("deploy_pod", name=name, image=image, namespace=namespace)
-    pod = Pod.gen(name=name, image=image, namespace=namespace, labels=labels or {})
-    pod.create()
+    pod = await Pod(
+        {
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": name,
+                "namespace": namespace,
+                "labels": labels or {},
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": name,
+                        "image": image,
+                    }
+                ]
+            },
+        }
+    )
+    await pod.create()
     return {
         "name": pod.name,
         "namespace": pod.namespace,

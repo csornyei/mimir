@@ -1,17 +1,39 @@
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
-    -   id: check-yaml
-    -   id: end-of-file-fixer
-    -   id: trailing-whitespace
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.15.9
-  hooks:
-    - id: ruff-check
-    - id: ruff-format
-- repo: https://github.com/allganize/ty-pre-commit
-  rev: v0.0.29
-  hooks:
-    - id: ty-check
-      args: [--python, .venv/bin/python3]
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.9
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+  - repo: https://github.com/allganize/ty-pre-commit
+    rev: v0.0.29
+    hooks:
+      - id: ty-check
+        args: [--python, .venv/bin/python3]
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: npm --prefix agent_ui run format
+        language: system
+        types_or: [ts, tsx, css, json, markdown]
+        pass_filenames: false
+
+      - id: eslint
+        name: eslint
+        entry: npm --prefix agent_ui run lint
+        language: system
+        types_or: [ts, tsx]
+        pass_filenames: false
+
+      - id: tsc
+        name: typescript type check
+        entry: npm --prefix agent_ui run tsc -- --noEmit
+        language: system
+        types_or: [ts, tsx]
+        pass_filenames: false

@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_core.agent.conversation import conversation_manager
@@ -47,7 +47,9 @@ async def list_conversations(
     db: AsyncSession = Depends(get_db),
 ) -> list[ConversationSummary]:
     result = await db.execute(
-        select(ConversationModel).order_by(ConversationModel.last_active.desc())
+        select(ConversationModel)
+        .where(not_(ConversationModel.id.like("morning|%")))
+        .order_by(ConversationModel.last_active.desc())
     )
     return result.scalars().all()  # ty: ignore[invalid-return-type]
 
@@ -63,14 +65,17 @@ async def get_conversation(
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    total_result = await db.execute(
-        select(func.count()).where(MessageModel.conversation_id == conversation_id)
+    visible_filter = (
+        MessageModel.conversation_id == conversation_id,
+        MessageModel.role != "tool_result",
     )
+
+    total_result = await db.execute(select(func.count()).where(*visible_filter))
     total = total_result.scalar_one()
 
     messages_result = await db.execute(
         select(MessageModel)
-        .where(MessageModel.conversation_id == conversation_id)
+        .where(*visible_filter)
         .order_by(MessageModel.timestamp.asc())
         .limit(limit)
         .offset(offset)

@@ -40,7 +40,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             db, request.conversation_id
         )
         await conversation_manager.add_message(
-            db, request.conversation_id, "user", request.message
+            db, request.conversation_id, request.message_role, request.message
         )
 
         # Each step is explicit so the future WS handler can emit progress between them
@@ -77,7 +77,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         bundle = await build_messages(
             context, request.conversation_id, db, agent_config
         )
-        response = await run_llm(
+        response, _thinking, _usage = await run_llm(
             bundle, context.tools, triggered_by=f"user:{request.user_id}"
         )
 

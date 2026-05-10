@@ -31,6 +31,10 @@ class ToolLoop(ToolDispatcher):
         tools: list[dict],
         max_steps: int | None = None,
         triggered_by: str = "agent",
+        conversation_id: str | None = None,
+        on_token: Callable[[str], Awaitable[None]] | None = None,
+        on_thinking_token: Callable[[str], Awaitable[None]] | None = None,
+        on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
         # Legacy combined callback kept for backward compat (fires after execution)
         on_tool_call: Callable[[str, dict, dict], Awaitable[None]] | None = None,
         # New separate callbacks
@@ -44,7 +48,7 @@ class ToolLoop(ToolDispatcher):
         repetition_penalty: float | None = None,
         enable_thinking: bool | None = None,
         thinking_budget: int | None = None,
-    ) -> str:
+    ) -> tuple[str, str, dict]:
         max_steps = max_steps or agent_config.tool_max_steps
         messages = messages.copy()
 
@@ -56,24 +60,48 @@ class ToolLoop(ToolDispatcher):
             tool_calls_total = 0
             approval_requested = False
             seen_individual_calls: set[tuple] = set()
+            accumulated_usage: dict = {"prompt_tokens": 0, "completion_tokens": 0}
 
             for step in range(max_steps):
                 steps_taken = step + 1
                 logger.debug("tool_loop_step", step=steps_taken, max_steps=max_steps)
 
-                response = await llm_client.complete(
-                    messages=messages,
-                    tools=tools,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    top_p=top_p,
-                    min_p=min_p,
-                    repetition_penalty=repetition_penalty,
-                    enable_thinking=enable_thinking,
-                    thinking_budget=thinking_budget,
+                if on_token is not None:
+                    response = await llm_client.stream_complete(
+                        messages=messages,
+                        on_token=on_token,
+                        on_thinking_token=on_thinking_token,
+                        on_tool_pending=on_tool_pending,
+                        tools=tools,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        top_p=top_p,
+                        min_p=min_p,
+                        repetition_penalty=repetition_penalty,
+                        enable_thinking=enable_thinking,
+                        thinking_budget=thinking_budget,
+                    )
+                else:
+                    response = await llm_client.complete(
+                        messages=messages,
+                        tools=tools,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        top_p=top_p,
+                        min_p=min_p,
+                        repetition_penalty=repetition_penalty,
+                        enable_thinking=enable_thinking,
+                        thinking_budget=thinking_budget,
+                    )
+
+                step_usage = response.get("usage", {})
+                accumulated_usage["prompt_tokens"] += step_usage.get("prompt_tokens", 0)
+                accumulated_usage["completion_tokens"] += step_usage.get(
+                    "completion_tokens", 0
                 )
 
                 content = response.get("content", "")
+                thinking = response.get("thinking", "")
                 tool_calls = response.get("tool_calls", [])
 
                 assistant_msg: dict[str, Any] = {
@@ -92,7 +120,7 @@ class ToolLoop(ToolDispatcher):
                         "tool_loop.approval_requested", approval_requested
                     )
                     span.set_attribute("tool_loop.termination_reason", "stop")
-                    return content
+                    return content, thinking, accumulated_usage
 
                 tool_results = []
                 for tc in tool_calls:
@@ -153,7 +181,7 @@ class ToolLoop(ToolDispatcher):
 
                     if _is_write_tool(tool_name, tools):
                         result, action_id = await self._request_write_approval(
-                            tool_name, args, triggered_by
+                            tool_name, args, triggered_by, conversation_id
                         )
                         approval_requested = True
                         if on_approval_required is not None and action_id:
@@ -214,16 +242,39 @@ class ToolLoop(ToolDispatcher):
                 messages.extend(tool_results)
 
                 if approval_requested:
-                    final = await llm_client.complete(
-                        messages=messages,
-                        tools=tools,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        top_p=top_p,
-                        min_p=min_p,
-                        repetition_penalty=repetition_penalty,
-                        enable_thinking=enable_thinking,
-                        thinking_budget=thinking_budget,
+                    if on_token is not None:
+                        final = await llm_client.stream_complete(
+                            messages=messages,
+                            on_token=on_token,
+                            on_thinking_token=on_thinking_token,
+                            on_tool_pending=on_tool_pending,
+                            tools=tools,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            top_p=top_p,
+                            min_p=min_p,
+                            repetition_penalty=repetition_penalty,
+                            enable_thinking=enable_thinking,
+                            thinking_budget=thinking_budget,
+                        )
+                    else:
+                        final = await llm_client.complete(
+                            messages=messages,
+                            tools=tools,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            top_p=top_p,
+                            min_p=min_p,
+                            repetition_penalty=repetition_penalty,
+                            enable_thinking=enable_thinking,
+                            thinking_budget=thinking_budget,
+                        )
+                    final_usage = final.get("usage", {})
+                    accumulated_usage["prompt_tokens"] += final_usage.get(
+                        "prompt_tokens", 0
+                    )
+                    accumulated_usage["completion_tokens"] += final_usage.get(
+                        "completion_tokens", 0
                     )
                     span.set_attribute("tool_loop.steps_taken", steps_taken)
                     span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
@@ -231,7 +282,11 @@ class ToolLoop(ToolDispatcher):
                     span.set_attribute(
                         "tool_loop.termination_reason", "approval_requested"
                     )
-                    return final.get("content", "")
+                    return (
+                        final.get("content", ""),
+                        final.get("thinking", ""),
+                        accumulated_usage,
+                    )
 
             span.set_attribute("tool_loop.steps_taken", steps_taken)
             span.set_attribute("tool_loop.tool_calls_total", tool_calls_total)
@@ -241,21 +296,29 @@ class ToolLoop(ToolDispatcher):
             logger.warning("tool_loop_max_steps_exceeded", max_steps=max_steps)
             return (
                 "I reached the maximum number of tool steps. "
-                "Please try a more specific request."
+                "Please try a more specific request.",
+                "",
+                accumulated_usage,
             )
 
     async def _request_write_approval(
-        self, tool_name: str, args: dict[str, Any], triggered_by: str
+        self,
+        tool_name: str,
+        args: dict[str, Any],
+        triggered_by: str,
+        conversation_id: str | None = None,
     ) -> tuple[dict[str, Any], str | None]:
         """Request approval for a write tool. Returns (result_dict, action_id)."""
         from agent_core.agent.approval import manager as approval_manager
 
         description = f"call `{tool_name}` with: {args}"
-        payload = {
+        payload: dict[str, Any] = {
             "tool_name": tool_name,
             "arguments": args,
             "description": description,
         }
+        if conversation_id:
+            payload["web_conversation_id"] = conversation_id
         try:
             async with get_session() as session:
                 action = await approval_manager.request_approval(
