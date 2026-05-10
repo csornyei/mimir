@@ -1,84 +1,116 @@
 export interface LLMSettings {
-  mode: 'precise' | 'balanced' | 'creative' | 'fast'
-  enable_thinking: boolean
-  thinking_budget: number | null // null = unlimited; irrelevant when enable_thinking = false
-  temperature: number
-  top_p: number
-  min_p: number
-  repetition_penalty: number
-  max_tokens: number
+    mode: "precise" | "balanced" | "creative" | "fast";
+    enable_thinking: boolean;
+    thinking_budget: number | null; // null = unlimited; irrelevant when enable_thinking = false
+    temperature: number;
+    top_p: number;
+    min_p: number;
+    repetition_penalty: number;
+    max_tokens: number;
 }
 
 export interface RagSource {
-  source_path: string
-  source_type: 'markdown' | 'pdf' | 'kiwix' | 'wallabag'
-  chunk_index: number
-  similarity_score: number
-  content_preview: string
+    source_path: string;
+    source_type: "markdown" | "pdf" | "kiwix" | "wallabag";
+    chunk_index: number;
+    similarity_score: number;
+    content_preview: string;
 }
 
 export interface EpisodicMemory {
-  summary: string
-  started_at: string
-  similarity_score: number
+    summary: string;
+    started_at: string;
+    similarity_score: number;
 }
 
 export interface ResponseMetadata {
-  thinking_tokens: number
-  response_tokens: number
-  prompt_tokens: number
-  latency_ms: number
-  rag_sources: RagSource[]
-  episodic_memories: EpisodicMemory[]
+    thinking_tokens: number;
+    response_tokens: number;
+    prompt_tokens: number;
+    latency_ms: number;
+    rag_sources: RagSource[];
+    episodic_memories: EpisodicMemory[];
 }
 
 export interface ToolCall {
-  call_id: string
-  name: string
-  arguments: Record<string, unknown>
-  result: string | null
+    call_id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+    result: string | null;
 }
 
 export interface ApprovalCard {
-  action_id: string
-  tool_name: string
-  arguments: Record<string, unknown>
-  status: 'pending' | 'approved' | 'completed' | 'failed' | 'rejected' | 'timeout'
+    action_id: string;
+    tool_name: string;
+    arguments: Record<string, unknown>;
+    status:
+        | "pending"
+        | "approved"
+        | "completed"
+        | "failed"
+        | "rejected"
+        | "timeout";
 }
 
 export interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  thinkingContent: string
-  toolCalls: ToolCall[]
-  approvalCard: ApprovalCard | null
-  metadata: ResponseMetadata | null
-  isStreaming: boolean
-  createdAt: string
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    thinkingContent: string;
+    toolCalls: ToolCall[];
+    approvalCard: ApprovalCard | null;
+    metadata: ResponseMetadata | null;
+    isStreaming: boolean;
+    createdAt: string;
 }
 
 export interface ConversationSummary {
-  id: string
-  created_at: string
-  last_active: string
-  title?: string
+    id: string;
+    created_at: string;
+    last_active: string;
+    title?: string;
 }
 
 // Server → Client
 export type ServerEvent =
-  | { type: 'connected' }
-  | { type: 'pong' }
-  | { type: 'thinking'; content: string }
-  | { type: 'response'; content: string; conversation_id?: string; request_id?: string | null }
-  | { type: 'tool_call'; name: string; arguments: Record<string, unknown>; call_id: string }
-  | { type: 'tool_result'; name: string; result: string; call_id: string }
-  | { type: 'approval_required'; action_id: string; tool_name: string; arguments: Record<string, unknown> }
-  | { type: 'approval_result'; action_id: string; status: 'completed' | 'failed' | 'rejected' | 'timeout'; result?: string; error?: string }
-  | { type: 'error'; message: string }
-  | { type: 'done'; metadata: ResponseMetadata; request_id?: string | null }
+    | { type: "connected" }
+    | { type: "pong" }
+    | { type: "thinking"; content: string }
+    | {
+          type: "response";
+          content: string;
+          conversation_id?: string;
+          request_id?: string | null;
+      }
+    | {
+          type: "tool_call";
+          name: string;
+          arguments: Record<string, unknown>;
+          call_id: string;
+      }
+    | { type: "tool_result"; name: string; result: string; call_id: string }
+    | {
+          type: "approval_required";
+          action_id: string;
+          tool_name: string;
+          arguments: Record<string, unknown>;
+      }
+    | {
+          type: "approval_result";
+          action_id: string;
+          status: "completed" | "failed" | "rejected" | "timeout";
+          result?: string;
+          error?: string;
+      }
+    | { type: "error"; message: string }
+    | { type: "done"; metadata: ResponseMetadata; request_id?: string | null };
 
 // Client → Server
 export type ClientEvent =
-  | { type: 'chat'; message: string; conversation_id: string | null; settings: LLMSettings }
-  | { type: 'ping' }
+    | {
+          type: "chat";
+          message: string;
+          conversation_id: string | null;
+          settings: LLMSettings;
+      }
+    | { type: "ping" };

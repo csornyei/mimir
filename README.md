@@ -16,7 +16,6 @@ Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cp
 
 **Human-in-the-loop for writes.** Read operations are autonomous. Write operations to external systems go through an explicit Slack approval flow before anything executes. This constraint is designed to relax over time as trust is established, not before.
 
-
 ---
 
 ## Architecture
@@ -172,7 +171,6 @@ Four times a day (08:00, 12:00, 16:00, 20:00 UTC) the scheduler fetches unread a
 - **LLM-based filtering:** the model scores articles against your `memory.md` profile and a rolling feedback summary so picks improve over time
 - **Four windows:** overnight (20→08), morning (08→12), midday (12→16), afternoon (16→20)
 - **Persistence:** each selected article is stored in `rss_digest_entries` for feedback tracking
-
 
 ---
 
