@@ -67,8 +67,19 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: agent_ui/package-lock.json
+
       - name: Install dependencies
         run: uv sync --all-groups
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: agent_ui
 
       - name: Run pre-commit checks
         run: uv run pre-commit run --all-files
