@@ -77,7 +77,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         bundle = await build_messages(
             context, request.conversation_id, db, agent_config
         )
-        response = await run_llm(
+        response, _thinking, _usage = await run_llm(
             bundle, context.tools, triggered_by=f"user:{request.user_id}"
         )
 

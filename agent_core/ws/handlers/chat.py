@@ -142,6 +142,30 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
 
                 # ── WS event callbacks ─────────────────────────────────────────
 
+                _did_stream = False
+                _did_think = False
+
+                async def on_token(delta: str) -> None:
+                    nonlocal _did_stream
+                    _did_stream = True
+                    await ws_registry.send(
+                        conversation_id,
+                        {
+                            "type": "response",
+                            "request_id": req.request_id,
+                            "conversation_id": conversation_id,
+                            "content": delta,
+                        },
+                    )
+
+                async def on_thinking_token(delta: str) -> None:
+                    nonlocal _did_think
+                    _did_think = True
+                    await ws_registry.send(
+                        conversation_id,
+                        {"type": "thinking", "content": delta},
+                    )
+
                 async def on_tool_start(name: str, args: dict, call_id: str) -> None:
                     await ws_registry.send(
                         conversation_id,
@@ -182,11 +206,13 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
 
                 # ── Run LLM ───────────────────────────────────────────────────
 
-                response = await run_llm(
+                response, thinking, usage = await run_llm(
                     bundle,
                     context.tools,
                     triggered_by=f"user:{req.user_id}",
                     conversation_id=conversation_id,
+                    on_token=on_token,
+                    on_thinking_token=on_thinking_token,
                     on_tool_start=on_tool_start,
                     on_tool_done=on_tool_done,
                     on_approval_required=on_approval_required,
@@ -208,18 +234,27 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                 span.set_attribute("chat.response_length", len(response))
                 span.set_attribute("chat.latency_ms", latency_ms)
 
-                # ── response event ────────────────────────────────────────────
-                await ws_registry.send(
-                    conversation_id,
-                    {
-                        "type": "response",
-                        "request_id": req.request_id,
-                        "conversation_id": conversation_id,
-                        "content": response,
-                    },
-                )
+                # ── thinking event (non-streaming path only) ──────────────────
+                if not _did_think and thinking:
+                    await ws_registry.send(
+                        conversation_id,
+                        {"type": "thinking", "content": thinking},
+                    )
+
+                # ── response event (non-streaming path only) ──────────────────
+                if not _did_stream:
+                    await ws_registry.send(
+                        conversation_id,
+                        {
+                            "type": "response",
+                            "request_id": req.request_id,
+                            "conversation_id": conversation_id,
+                            "content": response,
+                        },
+                    )
 
                 # ── done event with metadata ──────────────────────────────────
+                thinking_tokens = len(thinking) // 4 if thinking else 0
                 episodic_for_metadata = [
                     {
                         "summary": m.get("summary", ""),
@@ -237,9 +272,9 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                         "type": "done",
                         "request_id": req.request_id,
                         "metadata": {
-                            "thinking_tokens": 0,
-                            "response_tokens": 0,
-                            "prompt_tokens": 0,
+                            "thinking_tokens": thinking_tokens,
+                            "response_tokens": usage.get("completion_tokens", 0),
+                            "prompt_tokens": usage.get("prompt_tokens", 0),
                             "latency_ms": latency_ms,
                             "rag_sources": rag_sources,
                             "episodic_memories": episodic_for_metadata,

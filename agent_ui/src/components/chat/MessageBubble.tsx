@@ -78,10 +78,9 @@ export function MessageBubble({ message }: Props) {
                                         {message.content}
                                     </ReactMarkdown>
                                 </div>
-                                {message.isStreaming &&
-                                    message.content === "" && (
-                                        <span className="bg-muted-foreground/60 inline-block h-4 w-1.5 animate-pulse rounded-sm align-middle" />
-                                    )}
+                                {message.isStreaming && !message.metadata && (
+                                    <span className="bg-muted-foreground/60 inline-block h-4 w-1.5 animate-pulse rounded-sm align-middle" />
+                                )}
                                 {/* Mobile info button — only when metadata is available */}
                                 {message.metadata && (
                                     <button

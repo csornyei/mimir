@@ -10,6 +10,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Spinner } from "@/components/ui/spinner";
 import { useMimirStore } from "@/store";
 import type { ApprovalCard as ApprovalCardType } from "@/types";
 
@@ -17,8 +18,25 @@ interface Props {
     card: ApprovalCardType;
 }
 
+function StatusBadge({
+    icon,
+    text,
+    className,
+}: {
+    icon: string;
+    text: string;
+    className: string;
+}) {
+    return (
+        <div className={`rounded-lg border px-3 py-2 text-xs ${className}`}>
+            {icon} {text}
+        </div>
+    );
+}
+
 export function ApprovalCard({ card }: Props) {
     const { approveAction, rejectAction } = useMimirStore();
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [editedArgs, setEditedArgs] = useState(
         JSON.stringify(card.arguments, null, 2)
@@ -27,25 +45,84 @@ export function ApprovalCard({ card }: Props) {
 
     if (card.status === "approved") {
         return (
-            <div className="rounded-lg border border-green-900/60 bg-green-950/30 px-3 py-2 text-xs text-green-400">
-                ✅ Approved
-            </div>
+            <StatusBadge
+                icon="⏳"
+                text="Approved — executing…"
+                className="border-amber-900/60 bg-amber-950/30 text-amber-400"
+            />
         );
     }
-
+    if (card.status === "completed") {
+        return (
+            <StatusBadge
+                icon="✅"
+                text="Completed"
+                className="border-green-900/60 bg-green-950/30 text-green-400"
+            />
+        );
+    }
+    if (card.status === "failed") {
+        return (
+            <StatusBadge
+                icon="⚠️"
+                text="Execution failed"
+                className="border-red-900/60 bg-red-950/30 text-red-400"
+            />
+        );
+    }
     if (card.status === "rejected") {
         return (
-            <div className="rounded-lg border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-400">
-                ❌ Rejected
-            </div>
+            <StatusBadge
+                icon="❌"
+                text="Rejected"
+                className="border-red-900/60 bg-red-950/30 text-red-400"
+            />
+        );
+    }
+    if (card.status === "timeout") {
+        return (
+            <StatusBadge
+                icon="⏰"
+                text="Timed out"
+                className="border-zinc-700/60 bg-zinc-900/30 text-zinc-400"
+            />
         );
     }
 
-    function handleConfirmEdit() {
+    async function handleApprove() {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            await approveAction(card.action_id);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    async function handleReject() {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+        try {
+            await rejectAction(card.action_id);
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    async function handleConfirmEdit() {
+        if (isSubmitting) return;
         try {
             const parsed: unknown = JSON.parse(editedArgs);
-            approveAction(card.action_id, parsed as Record<string, unknown>);
+            setIsSubmitting(true);
             setEditOpen(false);
+            try {
+                await approveAction(
+                    card.action_id,
+                    parsed as Record<string, unknown>
+                );
+            } finally {
+                setIsSubmitting(false);
+            }
         } catch {
             setEditError("Invalid JSON — fix before approving");
         }
@@ -68,13 +145,19 @@ export function ApprovalCard({ card }: Props) {
                     <div className="flex flex-wrap gap-2">
                         <Button
                             size="sm"
-                            onClick={() => approveAction(card.action_id)}
+                            disabled={isSubmitting}
+                            onClick={handleApprove}
                         >
-                            ✅ Approve
+                            {isSubmitting ? (
+                                <Spinner className="h-3 w-3" />
+                            ) : (
+                                "✅ Approve"
+                            )}
                         </Button>
                         <Button
                             size="sm"
                             variant="outline"
+                            disabled={isSubmitting}
                             onClick={() => setEditOpen(true)}
                         >
                             ✏️ Edit &amp; approve
@@ -82,9 +165,14 @@ export function ApprovalCard({ card }: Props) {
                         <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => rejectAction(card.action_id)}
+                            disabled={isSubmitting}
+                            onClick={handleReject}
                         >
-                            ❌ Reject
+                            {isSubmitting ? (
+                                <Spinner className="h-3 w-3" />
+                            ) : (
+                                "❌ Reject"
+                            )}
                         </Button>
                     </div>
                 </AlertDescription>
@@ -120,8 +208,15 @@ export function ApprovalCard({ card }: Props) {
                         >
                             Cancel
                         </Button>
-                        <Button onClick={handleConfirmEdit}>
-                            Approve with edits
+                        <Button
+                            disabled={isSubmitting}
+                            onClick={handleConfirmEdit}
+                        >
+                            {isSubmitting ? (
+                                <Spinner className="h-3 w-3" />
+                            ) : (
+                                "Approve with edits"
+                            )}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
