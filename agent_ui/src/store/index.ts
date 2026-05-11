@@ -5,13 +5,41 @@ import type {
     Message,
     ConversationSummary,
     LLMSettings,
+    LLMPreset,
+    OllamaModel,
     ServerEvent,
     ApprovalCard,
     ToolCall,
     ResponseMetadata,
 } from "@/types";
-import { MODE_PRESETS } from "@/lib/presets";
-import type { Mode } from "@/lib/presets";
+
+export type Mode = "precise" | "balanced" | "creative" | "fast";
+
+const FALLBACK_PRESET: LLMPreset = {
+    name: "balanced",
+    label: "Balanced",
+    enable_thinking: true,
+    thinking_budget: 2000,
+    temperature: 0.5,
+    top_p: 0.9,
+    min_p: 0.05,
+    repetition_penalty: 1.0,
+    max_tokens: 4096,
+};
+
+function presetToSettings(preset: LLMPreset, model?: string): LLMSettings {
+    return {
+        mode: preset.name as Mode,
+        model,
+        enable_thinking: preset.enable_thinking,
+        thinking_budget: preset.thinking_budget,
+        temperature: preset.temperature,
+        top_p: preset.top_p,
+        min_p: preset.min_p,
+        repetition_penalty: preset.repetition_penalty,
+        max_tokens: preset.max_tokens,
+    };
+}
 
 // Module-level state — not reactive, just bookkeeping
 let _wasDisconnected = false;
@@ -46,8 +74,15 @@ interface MimirStore {
     settings: LLMSettings;
     thinkingBudgetDirty: boolean;
     setMode: (mode: Mode) => void;
+    setModel: (model: string | undefined) => void;
     setThinkingBudget: (budget: number | null) => void;
     setEnableThinking: (enabled: boolean) => void;
+
+    // Presets & models (fetched)
+    presets: LLMPreset[];
+    models: OllamaModel[];
+    fetchPresets: () => Promise<void>;
+    fetchModels: () => Promise<void>;
 
     // Pending approvals
     pendingApprovals: string[];
@@ -102,6 +137,8 @@ export const useMimirStore = create<MimirStore>()(
 
                 ws.onopen = () => {
                     set({ wsStatus: "connected" });
+                    void get().fetchPresets();
+                    void get().fetchModels();
                     if (_wasDisconnected) {
                         toast.success("Reconnected to Mimir", {
                             id: "ws-disconnect",
@@ -498,14 +535,21 @@ export const useMimirStore = create<MimirStore>()(
             },
 
             // Settings
-            settings: MODE_PRESETS.balanced,
+            settings: presetToSettings(FALLBACK_PRESET),
             thinkingBudgetDirty: false,
 
             setMode: (mode) => {
+                const { presets, settings } = get();
+                const preset =
+                    presets.find((p) => p.name === mode) ?? FALLBACK_PRESET;
                 set({
-                    settings: MODE_PRESETS[mode],
+                    settings: presetToSettings(preset, settings.model),
                     thinkingBudgetDirty: false,
                 });
+            },
+
+            setModel: (model) => {
+                set((s) => ({ settings: { ...s.settings, model } }));
             },
 
             setThinkingBudget: (budget) => {
@@ -520,6 +564,52 @@ export const useMimirStore = create<MimirStore>()(
                     settings: { ...s.settings, enable_thinking: enabled },
                     thinkingBudgetDirty: true,
                 }));
+            },
+
+            // Presets & models
+            presets: [],
+            models: [],
+
+            fetchPresets: async () => {
+                try {
+                    const res = await fetch("/api/presets");
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    const presets: LLMPreset[] = data.presets ?? [];
+                    const defaultPreset = data.default_preset as string;
+                    set({ presets });
+                    // Apply default preset if current mode isn't in fetched list
+                    const { settings } = get();
+                    const current = presets.find(
+                        (p) => p.name === settings.mode
+                    );
+                    if (!current) {
+                        const fallback =
+                            presets.find((p) => p.name === defaultPreset) ??
+                            presets[0];
+                        if (fallback) {
+                            set({
+                                settings: presetToSettings(
+                                    fallback,
+                                    settings.model
+                                ),
+                            });
+                        }
+                    }
+                } catch {
+                    // Keep using hardcoded fallback — no toast, not user-visible
+                }
+            },
+
+            fetchModels: async () => {
+                try {
+                    const res = await fetch("/api/models");
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    set({ models: data.models ?? [] });
+                } catch {
+                    // Silently ignore — model selector will be empty
+                }
             },
 
             // Approvals

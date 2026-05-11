@@ -2,6 +2,7 @@ import json
 import re
 from typing import Any
 
+from agent_core.config import agent_config
 from agent_core.llm.client import llm_client
 from agent_core.prompts import render_rss_filter_system, render_rss_filter_user
 from shared.logger import logger
@@ -59,5 +60,6 @@ async def llm_filter(
     n_picks: int,
 ) -> list[dict[str, Any]]:
     messages = _build_prompt(entries, semantic_memory, feedback_summary, n_picks)
-    response = await llm_client.complete(messages=messages)
+    scheduler_model = agent_config.llm_scheduler_model or agent_config.llm_model
+    response = await llm_client.complete(messages=messages, model=scheduler_model)
     return _parse_picks(response["content"])

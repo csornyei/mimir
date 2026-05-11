@@ -2,6 +2,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ModeSelector } from "@/components/controls/ModeSelector";
+import { ModelSelector } from "@/components/controls/ModelSelector";
 import { ThinkingSlider } from "@/components/controls/ThinkingSlider";
 import { MessageDetail } from "@/components/detail/MessageDetail";
 import { useMimirStore } from "@/store";
@@ -36,6 +37,8 @@ export function RightPanel() {
                 >
                     <ScrollArea className="h-full">
                         <div className="space-y-6 p-3">
+                            <ModelSelector />
+                            <Separator />
                             <ModeSelector />
                             <Separator />
                             <ThinkingSlider />

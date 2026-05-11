@@ -70,6 +70,7 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
             )
             return
 
+        model = settings.model if settings else None
         temperature = settings.temperature if settings else None
         max_tokens = settings.max_tokens if settings else None
         top_p = settings.top_p if settings else None
@@ -228,6 +229,7 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                     on_tool_start=on_tool_start,
                     on_tool_done=on_tool_done,
                     on_approval_required=on_approval_required,
+                    model=model,
                     temperature=temperature,
                     max_tokens=max_tokens,
                     top_p=top_p,

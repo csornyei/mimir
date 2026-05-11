@@ -51,5 +51,8 @@ class AgentConfig(SharedConfig):
     morning_brief_hour: int = 7
     newspaper_channel_id: str | None = None
 
+    llm_scheduler_model: str | None = None
+    llm_presets_path: str = "config/presets.yaml"
+
 
 agent_config = AgentConfig()

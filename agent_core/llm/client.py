@@ -10,16 +10,11 @@ from shared.logger import logger
 
 _tracer = trace.get_tracer("mimir.llm")
 
-_THINK_OPEN = "<|channel>thought"
-_THINK_CLOSE = "<channel|>"
-# Longest tag we need to buffer against chunk boundaries
-_MAX_TAG_LEN = max(len(_THINK_OPEN), len(_THINK_CLOSE))
-
 _EMPTY_USAGE: dict = {"prompt_tokens": 0, "completion_tokens": 0}
 
 
 def _extract_tool_calls(content: str) -> list[dict]:
-    """Parse raw Gemma 4 tool call tokens from content."""
+    """Parse raw Gemma 4 tool call tokens from content (fallback for non-native tool calling)."""
     tool_call_re = re.compile(
         r"<\|tool_call>call:(\w+)\{(.*?)\}<tool_call\|>", re.DOTALL
     )
@@ -45,25 +40,6 @@ def _extract_tool_calls(content: str) -> list[dict]:
     return calls
 
 
-def _split_thinking(content: str) -> tuple[str, str]:
-    """Split <think>…</think> block from response content.
-
-    Returns (thinking_content, clean_content).
-    """
-    start = content.find(_THINK_OPEN)
-    if start == -1:
-        return "", content
-    end = content.find(_THINK_CLOSE, start + len(_THINK_OPEN))
-    if end == -1:
-        # Unclosed tag — treat everything after <think> as thinking
-        thinking = content[start + len(_THINK_OPEN) :].strip()
-        clean = content[:start].strip()
-        return thinking, clean
-    thinking = content[start + len(_THINK_OPEN) : end].strip()
-    clean = (content[:start] + content[end + len(_THINK_CLOSE) :]).strip()
-    return thinking, clean
-
-
 class LLMClient:
     def __init__(self) -> None:
         headers = {
@@ -80,6 +56,7 @@ class LLMClient:
     def _build_payload(
         self,
         messages: list[dict],
+        model: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -90,7 +67,7 @@ class LLMClient:
         thinking_budget: int | None = None,
     ) -> dict:
         payload: dict = {
-            "model": agent_config.llm_model,
+            "model": model or agent_config.llm_model,
             "messages": messages,
             "max_tokens": max_tokens or agent_config.llm_max_tokens,
             "temperature": (
@@ -105,8 +82,6 @@ class LLMClient:
             payload["repetition_penalty"] = repetition_penalty
         if enable_thinking is not None:
             payload["enable_thinking"] = enable_thinking
-            payload["thinking_start_token"] = "<|channel>thought"
-            payload["thinking_end_token"] = "<channel|>"
         if thinking_budget is not None:
             payload["thinking_budget"] = thinking_budget
         if tools:
@@ -117,6 +92,7 @@ class LLMClient:
     async def complete(
         self,
         messages: list[dict],
+        model: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -127,12 +103,14 @@ class LLMClient:
         thinking_budget: int | None = None,
         fallbacks: list[list[dict]] | None = None,
     ) -> dict:
+        effective_model = model or agent_config.llm_model
         with _tracer.start_as_current_span("llm.complete") as span:
-            span.set_attribute("llm.model", agent_config.llm_model)
+            span.set_attribute("llm.model", effective_model)
             span.set_attribute("llm.tools_available", len(tools) if tools else 0)
             return await self._complete(
                 span,
                 messages,
+                effective_model,
                 tools,
                 temperature,
                 max_tokens,
@@ -150,6 +128,7 @@ class LLMClient:
         on_token: Callable[[str], Awaitable[None]],
         on_thinking_token: Callable[[str], Awaitable[None]] | None = None,
         on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
+        model: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -165,8 +144,9 @@ class LLMClient:
         Returns the same dict shape as complete() once the stream ends.
         Tool call deltas are accumulated silently and returned in tool_calls.
         """
+        effective_model = model or agent_config.llm_model
         with _tracer.start_as_current_span("llm.stream_complete") as span:
-            span.set_attribute("llm.model", agent_config.llm_model)
+            span.set_attribute("llm.model", effective_model)
             span.set_attribute("llm.streaming", True)
             span.set_attribute("llm.tools_available", len(tools) if tools else 0)
             candidates = [messages] + (fallbacks or [])
@@ -176,6 +156,7 @@ class LLMClient:
                 try:
                     payload = self._build_payload(
                         msgs,
+                        model=effective_model,
                         tools=tools,
                         temperature=temperature,
                         max_tokens=max_tokens,
@@ -234,13 +215,13 @@ class LLMClient:
         on_thinking_token: Callable[[str], Awaitable[None]] | None,
         on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> dict:
-        """Execute one SSE streaming request and return the accumulated result."""
-        in_think = False
+        """Execute one SSE streaming request and return the accumulated result.
+
+        Ollama streams thinking in the `reasoning` delta field, content in `content`.
+        """
         content_acc = ""
         thinking_acc = ""
-        pending = ""  # lookahead buffer for tag-boundary chunks
         usage_chunk: dict | None = None
-        # tool call accumulator: delta index → partial call dict
         tool_calls_acc: dict[int, dict] = {}
 
         async with self._client.stream(
@@ -282,41 +263,22 @@ class LLMClient:
                         "function", {}
                     ).get("arguments", "")
 
+                # Ollama returns thinking in `reasoning`, response in `content`
+                delta_thinking: str = delta.get("reasoning") or ""
                 delta_content: str = delta.get("content") or ""
-                if not delta_content:
-                    continue
 
-                pending += delta_content
-                (
-                    pending,
-                    in_think,
-                    content_acc,
-                    thinking_acc,
-                ) = await self._process_pending(
-                    pending,
-                    in_think,
-                    content_acc,
-                    thinking_acc,
-                    on_token,
-                    on_thinking_token,
-                    partial=True,
-                )
+                if delta_thinking:
+                    thinking_acc += delta_thinking
+                    if on_thinking_token:
+                        await on_thinking_token(delta_thinking)
 
-        # Flush remaining content buffer
-        if pending:
-            _, _in_think, content_acc, thinking_acc = await self._process_pending(
-                pending,
-                in_think,
-                content_acc,
-                thinking_acc,
-                on_token,
-                on_thinking_token,
-                partial=False,
-            )
+                if delta_content:
+                    content_acc += delta_content
+                    await on_token(delta_content)
 
         tool_calls = [tool_calls_acc[i] for i in sorted(tool_calls_acc)]
 
-        # Gemma 4 fallback: tool calls embedded as tokens in content
+        # Fallback: tool calls embedded as tokens in content (non-native tool calling)
         if not tool_calls and "<|tool_call>" in content_acc:
             logger.warning(
                 "runtime_tool_parser_broken",
@@ -355,65 +317,11 @@ class LLMClient:
             "usage": usage_dict,
         }
 
-    async def _process_pending(
-        self,
-        pending: str,
-        in_think: bool,
-        content_acc: str,
-        thinking_acc: str,
-        on_token: Callable[[str], Awaitable[None]],
-        on_thinking_token: Callable[[str], Awaitable[None]] | None,
-        *,
-        partial: bool,
-    ) -> tuple[str, bool, str, str]:
-        """Route buffered content to the appropriate callback.
-
-        Returns (remaining_pending, in_think, content_acc, thinking_acc).
-        """
-        while pending:
-            if in_think:
-                idx = pending.find(_THINK_CLOSE)
-                if idx != -1:
-                    before = pending[:idx]
-                    if before:
-                        thinking_acc += before
-                        if on_thinking_token:
-                            await on_thinking_token(before)
-                    in_think = False
-                    pending = pending[idx + len(_THINK_CLOSE) :]
-                else:
-                    safe = len(pending) - _MAX_TAG_LEN if partial else len(pending)
-                    if safe > 0:
-                        flush = pending[:safe]
-                        thinking_acc += flush
-                        if on_thinking_token:
-                            await on_thinking_token(flush)
-                        pending = pending[safe:]
-                    break
-            else:
-                idx = pending.find(_THINK_OPEN)
-                if idx != -1:
-                    before = pending[:idx]
-                    if before:
-                        content_acc += before
-                        await on_token(before)
-                    in_think = True
-                    pending = pending[idx + len(_THINK_OPEN) :]
-                else:
-                    safe = len(pending) - _MAX_TAG_LEN if partial else len(pending)
-                    if safe > 0:
-                        flush = pending[:safe]
-                        content_acc += flush
-                        await on_token(flush)
-                        pending = pending[safe:]
-                    break
-
-        return pending, in_think, content_acc, thinking_acc
-
     async def _complete(
         self,
         span: trace.Span,
         messages: list[dict],
+        model: str | None = None,
         tools: list[dict] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
@@ -431,6 +339,7 @@ class LLMClient:
             try:
                 payload = self._build_payload(
                     msgs,
+                    model=model,
                     tools=tools,
                     temperature=temperature,
                     max_tokens=max_tokens,
@@ -487,8 +396,9 @@ class LLMClient:
                 choice = result["choices"][0]
                 message = choice.get("message", {})
                 finish_reason = choice.get("finish_reason", "stop")
-                raw_content: str = message.get("content", "")
-                thinking, clean_content = _split_thinking(raw_content)
+                # Ollama returns thinking in `reasoning`, response in `content`
+                thinking: str = message.get("reasoning") or ""
+                clean_content: str = message.get("content") or ""
 
                 if tools and message.get("tool_calls"):
                     tool_calls = message.get("tool_calls", [])
@@ -502,14 +412,16 @@ class LLMClient:
                         "usage": usage_dict,
                     }
                 elif (
-                    tools and finish_reason == "stop" and "<|tool_call>" in raw_content
+                    tools
+                    and finish_reason == "stop"
+                    and "<|tool_call>" in clean_content
                 ):
                     logger.warning(
                         "runtime_tool_parser_broken",
                         fallback="manual_extraction",
-                        content_preview=raw_content[:120],
+                        content_preview=clean_content[:120],
                     )
-                    raw_calls = _extract_tool_calls(raw_content)
+                    raw_calls = _extract_tool_calls(clean_content)
                     span.set_attribute("llm.finish_reason", "tool_calls")
                     span.set_attribute("llm.tool_calls_count", len(raw_calls))
                     span.set_attribute("llm.tool_parser_fallback", True)

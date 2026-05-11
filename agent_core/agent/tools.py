@@ -41,6 +41,7 @@ class ToolLoop(ToolDispatcher):
         on_tool_start: Callable[[str, dict, str], Awaitable[None]] | None = None,
         on_tool_done: Callable[[str, str, str], Awaitable[None]] | None = None,
         on_approval_required: Callable[[str, str, dict], Awaitable[None]] | None = None,
+        model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
         top_p: float | None = None,
@@ -72,6 +73,7 @@ class ToolLoop(ToolDispatcher):
                         on_token=on_token,
                         on_thinking_token=on_thinking_token,
                         on_tool_pending=on_tool_pending,
+                        model=model,
                         tools=tools,
                         temperature=temperature,
                         max_tokens=max_tokens,
@@ -84,6 +86,7 @@ class ToolLoop(ToolDispatcher):
                 else:
                     response = await llm_client.complete(
                         messages=messages,
+                        model=model,
                         tools=tools,
                         temperature=temperature,
                         max_tokens=max_tokens,
@@ -248,6 +251,7 @@ class ToolLoop(ToolDispatcher):
                             on_token=on_token,
                             on_thinking_token=on_thinking_token,
                             on_tool_pending=on_tool_pending,
+                            model=model,
                             tools=tools,
                             temperature=temperature,
                             max_tokens=max_tokens,
@@ -260,6 +264,7 @@ class ToolLoop(ToolDispatcher):
                     else:
                         final = await llm_client.complete(
                             messages=messages,
+                            model=model,
                             tools=tools,
                             temperature=temperature,
                             max_tokens=max_tokens,
