@@ -1,3 +1,8 @@
+export interface RagParams {
+    top_k?: number; // undefined → backend uses env default
+    threshold?: number;
+}
+
 export interface LLMSettings {
     mode: "precise" | "balanced" | "creative" | "fast";
     model?: string; // overrides backend default when set
@@ -169,5 +174,6 @@ export type ClientEvent =
           message: string;
           conversation_id: string | null;
           settings: LLMSettings;
+          rag?: RagParams;
       }
     | { type: "ping" };

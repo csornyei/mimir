@@ -69,6 +69,14 @@ class PendingActionPatch(BaseModel):
     status: str
 
 
+# ── RAG parameters sent with every chat WS event ────────────────────────────
+
+
+class RagParams(BaseModel):
+    top_k: int | None = None  # None → use AgentConfig.rag_top_k
+    threshold: float | None = None  # None → use AgentConfig.rag_threshold
+
+
 # ── LLM settings sent with every chat WS event ──────────────────────────────
 
 
@@ -96,6 +104,7 @@ class WSChatRequest(BaseModel):
     user_id: str = "web"
     message: str
     settings: LLMSettings | None = None
+    rag: RagParams | None = None
 
 
 # ── Approval wrappers ────────────────────────────────────────────────────────

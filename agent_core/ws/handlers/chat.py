@@ -112,7 +112,7 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
 
                 async with get_session() as db:
                     rag_context, _chunks_used, rag_sources = await retrieve_rag_context(
-                        req.message, db, agent_config.rag_max_tokens
+                        req.message, db, agent_config.rag_max_tokens, rag_params=req.rag
                     )
                     episodic_memories_raw = await EpisodicMemory(db).retrieve(
                         req.message, k=agent_config.episodic_retrieval_k

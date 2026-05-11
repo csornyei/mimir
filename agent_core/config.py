@@ -17,6 +17,8 @@ class AgentConfig(SharedConfig):
     conversation_window_max: int = 20
 
     rag_max_tokens: int = 2000
+    rag_top_k: int = 5
+    rag_threshold: float = 0.6
     episodic_max_tokens: int = 600
     semantic_memory_max_tokens: int = 1500
 

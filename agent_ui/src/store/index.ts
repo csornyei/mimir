@@ -7,6 +7,7 @@ import type {
     LLMSettings,
     LLMPreset,
     OllamaModel,
+    RagParams,
     ServerEvent,
     ApprovalCard,
     ToolCall,
@@ -39,6 +40,10 @@ function presetToSettings(preset: LLMPreset, model?: string): LLMSettings {
         repetition_penalty: preset.repetition_penalty,
         max_tokens: preset.max_tokens,
     };
+}
+
+function hasRagOverrides(p: RagParams): boolean {
+    return p.top_k !== undefined || p.threshold !== undefined;
 }
 
 // Module-level state — not reactive, just bookkeeping
@@ -77,6 +82,22 @@ interface MimirStore {
     setModel: (model: string | undefined) => void;
     setThinkingBudget: (budget: number | null) => void;
     setEnableThinking: (enabled: boolean) => void;
+    setLLMParam: <K extends keyof LLMSettings>(
+        key: K,
+        value: LLMSettings[K]
+    ) => void;
+
+    // RAG params (persisted)
+    ragParams: RagParams;
+    setRagParam: <K extends keyof RagParams>(
+        key: K,
+        value: RagParams[K]
+    ) => void;
+    resetRagParams: () => void;
+
+    // Debug mode (persisted)
+    debugMode: boolean;
+    setDebugMode: (on: boolean) => void;
 
     // Presets & models (fetched)
     presets: LLMPreset[];
@@ -278,7 +299,7 @@ export const useMimirStore = create<MimirStore>()(
             },
 
             sendMessage: (text) => {
-                const { ws, activeConversationId, settings } = get();
+                const { ws, activeConversationId, settings, ragParams } = get();
                 if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
                 const userMessage: Message = {
@@ -315,6 +336,7 @@ export const useMimirStore = create<MimirStore>()(
                         conversation_id: activeConversationId,
                         message: text,
                         settings,
+                        rag: hasRagOverrides(ragParams) ? ragParams : undefined,
                     })
                 );
             },
@@ -566,6 +588,23 @@ export const useMimirStore = create<MimirStore>()(
                 }));
             },
 
+            setLLMParam: (key, value) => {
+                set((s) => ({ settings: { ...s.settings, [key]: value } }));
+            },
+
+            // RAG params
+            ragParams: {},
+
+            setRagParam: (key, value) => {
+                set((s) => ({ ragParams: { ...s.ragParams, [key]: value } }));
+            },
+
+            resetRagParams: () => set({ ragParams: {} }),
+
+            // Debug mode
+            debugMode: false,
+            setDebugMode: (on) => set({ debugMode: on }),
+
             // Presets & models
             presets: [],
             models: [],
@@ -702,6 +741,8 @@ export const useMimirStore = create<MimirStore>()(
                 settings: s.settings,
                 thinkingBudgetDirty: s.thinkingBudgetDirty,
                 conversationTitles: s.conversationTitles,
+                ragParams: s.ragParams,
+                debugMode: s.debugMode,
             }),
         }
     )
