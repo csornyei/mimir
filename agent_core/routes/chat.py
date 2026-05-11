@@ -7,8 +7,10 @@ from agent_core.agent.context import ChatContext
 from agent_core.agent.conversation import conversation_manager
 from agent_core.agent.llm_dispatch import run_llm
 from agent_core.agent.tool_schema import tool_schema_registry
+from agent_core.agent.types import RunContext
 from agent_core.config import agent_config
 from agent_core.llm.messages import build_messages
+from agent_core.llm.params import LLMParams
 from agent_core.llm.prompt import format_episodic_context
 from agent_core.memory.episodic import EpisodicMemory
 from agent_core.memory.semantic import SemanticMemory
@@ -77,11 +79,17 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         bundle = await build_messages(
             context, request.conversation_id, db, agent_config
         )
-        response, _thinking, _usage = await run_llm(
-            bundle, context.tools, triggered_by=f"user:{request.user_id}"
+        run_ctx = RunContext(
+            triggered_by=f"user:{request.user_id}",
+            conversation_id=request.conversation_id,
+        )
+        result = await run_llm(
+            bundle, context.tools, context=run_ctx, params=LLMParams()
         )
 
         await conversation_manager.add_message(
-            db, request.conversation_id, "assistant", response
+            db, request.conversation_id, "assistant", result.content
         )
-        return ChatResponse(response=response, conversation_id=request.conversation_id)
+        return ChatResponse(
+            response=result.content, conversation_id=request.conversation_id
+        )

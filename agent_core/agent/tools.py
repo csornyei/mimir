@@ -6,13 +6,26 @@ from uuid import uuid4
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode
 
-from agent_core.config import agent_config
 from agent_core.agent.dispatcher import ToolDispatcher
+from agent_core.agent.events import (
+    AgentEvent,
+    ApprovalRequired,
+    ResponseToken,
+    ThinkingToken,
+    ToolDone,
+    ToolPending,
+    ToolStart,
+)
+from agent_core.agent.types import AgentResult, RunContext
+from agent_core.config import agent_config
+from agent_core.llm.client import llm_client
+from agent_core.llm.params import LLMParams
 from shared.db import get_session
 from shared.logger import logger
-from agent_core.llm.client import llm_client
 
 _tracer = trace.get_tracer("mimir.agent.tools")
+
+_DEFAULT_CONTEXT = RunContext(triggered_by="agent")
 
 
 def _is_write_tool(tool_name: str, tools: list[dict]) -> bool:
@@ -29,32 +42,18 @@ class ToolLoop(ToolDispatcher):
         self,
         messages: list[dict],
         tools: list[dict],
+        context: RunContext | None = None,
+        params: LLMParams | None = None,
         max_steps: int | None = None,
-        triggered_by: str = "agent",
-        conversation_id: str | None = None,
-        on_token: Callable[[str], Awaitable[None]] | None = None,
-        on_thinking_token: Callable[[str], Awaitable[None]] | None = None,
-        on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
-        # Legacy combined callback kept for backward compat (fires after execution)
-        on_tool_call: Callable[[str, dict, dict], Awaitable[None]] | None = None,
-        # New separate callbacks
-        on_tool_start: Callable[[str, dict, str], Awaitable[None]] | None = None,
-        on_tool_done: Callable[[str, str, str], Awaitable[None]] | None = None,
-        on_approval_required: Callable[[str, str, dict], Awaitable[None]] | None = None,
-        model: str | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        top_p: float | None = None,
-        min_p: float | None = None,
-        repetition_penalty: float | None = None,
-        enable_thinking: bool | None = None,
-        thinking_budget: int | None = None,
-    ) -> tuple[str, str, dict]:
+        on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
+    ) -> AgentResult:
+        ctx = context or _DEFAULT_CONTEXT
+        params = params or LLMParams()
         max_steps = max_steps or agent_config.tool_max_steps
         messages = messages.copy()
 
         with _tracer.start_as_current_span("agent.tool_loop") as span:
-            span.set_attribute("tool_loop.triggered_by", triggered_by)
+            span.set_attribute("tool_loop.triggered_by", ctx.triggered_by)
             span.set_attribute("tool_loop.max_steps", max_steps)
 
             steps_taken = 0
@@ -63,38 +62,37 @@ class ToolLoop(ToolDispatcher):
             seen_individual_calls: set[tuple] = set()
             accumulated_usage: dict = {"prompt_tokens": 0, "completion_tokens": 0}
 
+            # Translate on_event into the per-callback shape expected by llm_client
+            async def _on_token(delta: str) -> None:
+                if on_event is not None:
+                    await on_event(ResponseToken(content=delta))
+
+            async def _on_thinking_token(delta: str) -> None:
+                if on_event is not None:
+                    await on_event(ThinkingToken(content=delta))
+
+            async def _on_tool_pending(name: str, call_id: str) -> None:
+                if on_event is not None:
+                    await on_event(ToolPending(name=name, call_id=call_id))
+
             for step in range(max_steps):
                 steps_taken = step + 1
                 logger.debug("tool_loop_step", step=steps_taken, max_steps=max_steps)
 
-                if on_token is not None:
+                if on_event is not None:
                     response = await llm_client.stream_complete(
                         messages=messages,
-                        on_token=on_token,
-                        on_thinking_token=on_thinking_token,
-                        on_tool_pending=on_tool_pending,
-                        model=model,
+                        on_token=_on_token,
+                        on_thinking_token=_on_thinking_token,
+                        on_tool_pending=_on_tool_pending,
+                        params=params,
                         tools=tools,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        top_p=top_p,
-                        min_p=min_p,
-                        repetition_penalty=repetition_penalty,
-                        enable_thinking=enable_thinking,
-                        thinking_budget=thinking_budget,
                     )
                 else:
                     response = await llm_client.complete(
                         messages=messages,
-                        model=model,
+                        params=params,
                         tools=tools,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        top_p=top_p,
-                        min_p=min_p,
-                        repetition_penalty=repetition_penalty,
-                        enable_thinking=enable_thinking,
-                        thinking_budget=thinking_budget,
                     )
 
                 step_usage = response.get("usage", {})
@@ -123,7 +121,11 @@ class ToolLoop(ToolDispatcher):
                         "tool_loop.approval_requested", approval_requested
                     )
                     span.set_attribute("tool_loop.termination_reason", "stop")
-                    return content, thinking, accumulated_usage
+                    return AgentResult(
+                        content=content,
+                        thinking=thinking,
+                        usage=accumulated_usage,
+                    )
 
                 tool_results = []
                 for tc in tool_calls:
@@ -170,30 +172,39 @@ class ToolLoop(ToolDispatcher):
                         )
                         args = {}
 
-                    # Fire on_tool_start before dispatch
-                    if on_tool_start is not None:
+                    if on_event is not None:
                         try:
-                            await on_tool_start(tool_name, args, call_id)
+                            await on_event(
+                                ToolStart(
+                                    name=tool_name, call_id=call_id, arguments=args
+                                )
+                            )
                         except Exception as cb_err:
                             logger.warning(
                                 "tool_callback_error",
-                                callback="on_tool_start",
+                                callback="on_event(ToolStart)",
                                 tool_name=tool_name,
                                 error=str(cb_err),
                             )
 
                     if _is_write_tool(tool_name, tools):
                         result, action_id = await self._request_write_approval(
-                            tool_name, args, triggered_by, conversation_id
+                            tool_name, args, ctx
                         )
                         approval_requested = True
-                        if on_approval_required is not None and action_id:
+                        if on_event is not None and action_id:
                             try:
-                                await on_approval_required(action_id, tool_name, args)
+                                await on_event(
+                                    ApprovalRequired(
+                                        action_id=action_id,
+                                        tool_name=tool_name,
+                                        arguments=args,
+                                    )
+                                )
                             except Exception as cb_err:
                                 logger.warning(
                                     "tool_callback_error",
-                                    callback="on_approval_required",
+                                    callback="on_event(ApprovalRequired)",
                                     tool_name=tool_name,
                                     error=str(cb_err),
                                 )
@@ -202,35 +213,22 @@ class ToolLoop(ToolDispatcher):
 
                     tool_calls_total += 1
 
-                    # Legacy callback (fires after read-tool execution; skipped for write tools)
-                    if on_tool_call is not None and not _is_write_tool(
-                        tool_name, tools
-                    ):
-                        try:
-                            await on_tool_call(tool_name, args, result)
-                        except Exception as cb_err:
-                            logger.warning(
-                                "tool_callback_error",
-                                callback="on_tool_call",
-                                tool_name=tool_name,
-                                error=str(cb_err),
-                            )
-
-                    # New separate done callback (only for read tools)
-                    if on_tool_done is not None and not _is_write_tool(
-                        tool_name, tools
-                    ):
+                    if on_event is not None and not _is_write_tool(tool_name, tools):
                         try:
                             result_str = (
                                 json.dumps(result)
                                 if not isinstance(result, str)
                                 else result
                             )
-                            await on_tool_done(tool_name, result_str, call_id)
+                            await on_event(
+                                ToolDone(
+                                    name=tool_name, call_id=call_id, result=result_str
+                                )
+                            )
                         except Exception as cb_err:
                             logger.warning(
                                 "tool_callback_error",
-                                callback="on_tool_done",
+                                callback="on_event(ToolDone)",
                                 tool_name=tool_name,
                                 error=str(cb_err),
                             )
@@ -245,34 +243,20 @@ class ToolLoop(ToolDispatcher):
                 messages.extend(tool_results)
 
                 if approval_requested:
-                    if on_token is not None:
+                    if on_event is not None:
                         final = await llm_client.stream_complete(
                             messages=messages,
-                            on_token=on_token,
-                            on_thinking_token=on_thinking_token,
-                            on_tool_pending=on_tool_pending,
-                            model=model,
+                            on_token=_on_token,
+                            on_thinking_token=_on_thinking_token,
+                            on_tool_pending=_on_tool_pending,
+                            params=params,
                             tools=tools,
-                            temperature=temperature,
-                            max_tokens=max_tokens,
-                            top_p=top_p,
-                            min_p=min_p,
-                            repetition_penalty=repetition_penalty,
-                            enable_thinking=enable_thinking,
-                            thinking_budget=thinking_budget,
                         )
                     else:
                         final = await llm_client.complete(
                             messages=messages,
-                            model=model,
+                            params=params,
                             tools=tools,
-                            temperature=temperature,
-                            max_tokens=max_tokens,
-                            top_p=top_p,
-                            min_p=min_p,
-                            repetition_penalty=repetition_penalty,
-                            enable_thinking=enable_thinking,
-                            thinking_budget=thinking_budget,
                         )
                     final_usage = final.get("usage", {})
                     accumulated_usage["prompt_tokens"] += final_usage.get(
@@ -287,10 +271,10 @@ class ToolLoop(ToolDispatcher):
                     span.set_attribute(
                         "tool_loop.termination_reason", "approval_requested"
                     )
-                    return (
-                        final.get("content", ""),
-                        final.get("thinking", ""),
-                        accumulated_usage,
+                    return AgentResult(
+                        content=final.get("content", ""),
+                        thinking=final.get("thinking", ""),
+                        usage=accumulated_usage,
                     )
 
             span.set_attribute("tool_loop.steps_taken", steps_taken)
@@ -299,19 +283,20 @@ class ToolLoop(ToolDispatcher):
             span.set_attribute("tool_loop.termination_reason", "max_steps_exceeded")
             span.set_status(StatusCode.ERROR, "max_steps_exceeded")
             logger.warning("tool_loop_max_steps_exceeded", max_steps=max_steps)
-            return (
-                "I reached the maximum number of tool steps. "
-                "Please try a more specific request.",
-                "",
-                accumulated_usage,
+            return AgentResult(
+                content=(
+                    "I reached the maximum number of tool steps. "
+                    "Please try a more specific request."
+                ),
+                thinking="",
+                usage=accumulated_usage,
             )
 
     async def _request_write_approval(
         self,
         tool_name: str,
         args: dict[str, Any],
-        triggered_by: str,
-        conversation_id: str | None = None,
+        context: RunContext,
     ) -> tuple[dict[str, Any], str | None]:
         """Request approval for a write tool. Returns (result_dict, action_id)."""
         from agent_core.agent.approval import manager as approval_manager
@@ -322,14 +307,14 @@ class ToolLoop(ToolDispatcher):
             "arguments": args,
             "description": description,
         }
-        if conversation_id:
-            payload["web_conversation_id"] = conversation_id
+        if context.conversation_id:
+            payload["web_conversation_id"] = context.conversation_id
         try:
             async with get_session() as session:
                 action = await approval_manager.request_approval(
                     session,
                     payload=payload,
-                    triggered_by=triggered_by,
+                    triggered_by=context.triggered_by,
                 )
             logger.debug("write_tool_approval_requested", tool_name=tool_name)
             return (

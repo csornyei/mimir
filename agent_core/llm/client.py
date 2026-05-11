@@ -6,6 +6,7 @@ from httpx import AsyncClient, HTTPStatusError
 from opentelemetry import trace
 
 from agent_core.config import agent_config
+from agent_core.llm.params import LLMParams
 from shared.logger import logger
 
 _tracer = trace.get_tracer("mimir.llm")
@@ -56,34 +57,29 @@ class LLMClient:
     def _build_payload(
         self,
         messages: list[dict],
-        model: str | None = None,
+        params: LLMParams,
         tools: list[dict] | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        top_p: float | None = None,
-        min_p: float | None = None,
-        repetition_penalty: float | None = None,
-        enable_thinking: bool | None = None,
-        thinking_budget: int | None = None,
     ) -> dict:
         payload: dict = {
-            "model": model or agent_config.llm_model,
+            "model": params.model or agent_config.llm_model,
             "messages": messages,
-            "max_tokens": max_tokens or agent_config.llm_max_tokens,
+            "max_tokens": params.max_tokens or agent_config.llm_max_tokens,
             "temperature": (
-                temperature if temperature is not None else agent_config.llm_temperature
+                params.temperature
+                if params.temperature is not None
+                else agent_config.llm_temperature
             ),
         }
-        if top_p is not None:
-            payload["top_p"] = top_p
-        if min_p is not None:
-            payload["min_p"] = min_p
-        if repetition_penalty is not None:
-            payload["repetition_penalty"] = repetition_penalty
-        if enable_thinking is not None:
-            payload["enable_thinking"] = enable_thinking
-        if thinking_budget is not None:
-            payload["thinking_budget"] = thinking_budget
+        if params.top_p is not None:
+            payload["top_p"] = params.top_p
+        if params.min_p is not None:
+            payload["min_p"] = params.min_p
+        if params.repetition_penalty is not None:
+            payload["repetition_penalty"] = params.repetition_penalty
+        if params.enable_thinking is not None:
+            payload["enable_thinking"] = params.enable_thinking
+        if params.thinking_budget is not None:
+            payload["thinking_budget"] = params.thinking_budget
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
@@ -92,35 +88,16 @@ class LLMClient:
     async def complete(
         self,
         messages: list[dict],
-        model: str | None = None,
+        params: LLMParams | None = None,
         tools: list[dict] | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        top_p: float | None = None,
-        min_p: float | None = None,
-        repetition_penalty: float | None = None,
-        enable_thinking: bool | None = None,
-        thinking_budget: int | None = None,
         fallbacks: list[list[dict]] | None = None,
     ) -> dict:
-        effective_model = model or agent_config.llm_model
+        params = params or LLMParams()
+        effective_model = params.model or agent_config.llm_model
         with _tracer.start_as_current_span("llm.complete") as span:
             span.set_attribute("llm.model", effective_model)
             span.set_attribute("llm.tools_available", len(tools) if tools else 0)
-            return await self._complete(
-                span,
-                messages,
-                effective_model,
-                tools,
-                temperature,
-                max_tokens,
-                top_p,
-                min_p,
-                repetition_penalty,
-                enable_thinking,
-                thinking_budget,
-                fallbacks,
-            )
+            return await self._complete(span, messages, params, tools, fallbacks)
 
     async def stream_complete(
         self,
@@ -128,15 +105,8 @@ class LLMClient:
         on_token: Callable[[str], Awaitable[None]],
         on_thinking_token: Callable[[str], Awaitable[None]] | None = None,
         on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
-        model: str | None = None,
+        params: LLMParams | None = None,
         tools: list[dict] | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        top_p: float | None = None,
-        min_p: float | None = None,
-        repetition_penalty: float | None = None,
-        enable_thinking: bool | None = None,
-        thinking_budget: int | None = None,
         fallbacks: list[list[dict]] | None = None,
     ) -> dict:
         """Stream an LLM response, calling on_token/on_thinking_token for each delta.
@@ -144,7 +114,8 @@ class LLMClient:
         Returns the same dict shape as complete() once the stream ends.
         Tool call deltas are accumulated silently and returned in tool_calls.
         """
-        effective_model = model or agent_config.llm_model
+        params = params or LLMParams()
+        effective_model = params.model or agent_config.llm_model
         with _tracer.start_as_current_span("llm.stream_complete") as span:
             span.set_attribute("llm.model", effective_model)
             span.set_attribute("llm.streaming", True)
@@ -154,18 +125,7 @@ class LLMClient:
 
             for attempt, msgs in enumerate(candidates):
                 try:
-                    payload = self._build_payload(
-                        msgs,
-                        model=effective_model,
-                        tools=tools,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        top_p=top_p,
-                        min_p=min_p,
-                        repetition_penalty=repetition_penalty,
-                        enable_thinking=enable_thinking,
-                        thinking_budget=thinking_budget,
-                    )
+                    payload = self._build_payload(msgs, params, tools)
                     payload["stream"] = True
 
                     result = await self._stream_request(
@@ -321,15 +281,8 @@ class LLMClient:
         self,
         span: trace.Span,
         messages: list[dict],
-        model: str | None = None,
+        params: LLMParams,
         tools: list[dict] | None = None,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        top_p: float | None = None,
-        min_p: float | None = None,
-        repetition_penalty: float | None = None,
-        enable_thinking: bool | None = None,
-        thinking_budget: int | None = None,
         fallbacks: list[list[dict]] | None = None,
     ) -> dict:
         candidates = [messages] + (fallbacks or [])
@@ -337,18 +290,7 @@ class LLMClient:
 
         for attempt, msgs in enumerate(candidates):
             try:
-                payload = self._build_payload(
-                    msgs,
-                    model=model,
-                    tools=tools,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    top_p=top_p,
-                    min_p=min_p,
-                    repetition_penalty=repetition_penalty,
-                    enable_thinking=enable_thinking,
-                    thinking_budget=thinking_budget,
-                )
+                payload = self._build_payload(msgs, params, tools)
 
                 response = await self._client.post("/v1/chat/completions", json=payload)
                 response.raise_for_status()
