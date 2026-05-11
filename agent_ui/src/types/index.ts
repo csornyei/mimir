@@ -1,5 +1,11 @@
+export interface RagParams {
+    top_k?: number; // undefined → backend uses env default
+    threshold?: number;
+}
+
 export interface LLMSettings {
     mode: "precise" | "balanced" | "creative" | "fast";
+    model?: string; // overrides backend default when set
     enable_thinking: boolean;
     thinking_budget: number | null; // null = unlimited; irrelevant when enable_thinking = false
     temperature: number;
@@ -7,6 +13,25 @@ export interface LLMSettings {
     min_p: number;
     repetition_penalty: number;
     max_tokens: number;
+}
+
+export interface LLMPreset {
+    name: string;
+    label: string;
+    enable_thinking: boolean;
+    thinking_budget: number | null;
+    temperature: number;
+    top_p: number;
+    min_p: number;
+    repetition_penalty: number;
+    max_tokens: number;
+}
+
+export interface OllamaModel {
+    name: string;
+    size: number | null;
+    modified_at: string | null;
+    is_loaded: boolean;
 }
 
 export interface RagSource {
@@ -149,5 +174,6 @@ export type ClientEvent =
           message: string;
           conversation_id: string | null;
           settings: LLMSettings;
+          rag?: RagParams;
       }
     | { type: "ping" };

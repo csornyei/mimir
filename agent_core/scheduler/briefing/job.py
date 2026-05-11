@@ -9,6 +9,7 @@ from shared.external.caldav.client import CalDAVClient
 from shared.external.ntfy import send_ntfy
 from shared.external.weather.weather import get_weather_data
 from agent_core.llm.client import llm_client
+from agent_core.llm.params import LLMParams
 from shared.logger import logger
 from agent_core.scheduler.briefing.prompt import build_morning_prompt
 
@@ -45,7 +46,10 @@ async def run_morning_briefing() -> None:
             weather_data = await get_weather_data(agent_config.weather_config_path)
 
         messages = build_morning_prompt(events, weather_data, todos)
-        response = await llm_client.complete(messages=messages)
+        scheduler_model = agent_config.llm_scheduler_model or agent_config.llm_model
+        response = await llm_client.complete(
+            messages=messages, params=LLMParams(model=scheduler_model)
+        )
         briefing_text = response.get("content", "")
 
         # Persist to DB — both the user prompt and the assistant response

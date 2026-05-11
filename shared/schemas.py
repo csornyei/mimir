@@ -69,11 +69,20 @@ class PendingActionPatch(BaseModel):
     status: str
 
 
+# ── RAG parameters sent with every chat WS event ────────────────────────────
+
+
+class RagParams(BaseModel):
+    top_k: int | None = None  # None → use AgentConfig.rag_top_k
+    threshold: float | None = None  # None → use AgentConfig.rag_threshold
+
+
 # ── LLM settings sent with every chat WS event ──────────────────────────────
 
 
 class LLMSettings(BaseModel):
     mode: Literal["precise", "balanced", "creative", "fast"] = "balanced"
+    model: str | None = None  # overrides config default when set
     enable_thinking: bool = True
     thinking_budget: int | None = (
         2000  # null = unlimited; 0 = disabled; irrelevant if enable_thinking=False
@@ -95,6 +104,7 @@ class WSChatRequest(BaseModel):
     user_id: str = "web"
     message: str
     settings: LLMSettings | None = None
+    rag: RagParams | None = None
 
 
 # ── Approval wrappers ────────────────────────────────────────────────────────
@@ -159,3 +169,35 @@ class BriefDetail(BaseModel):
     date: str
     created_at: datetime
     messages: list[MessageResponse]
+
+
+# ── Models & Presets ──────────────────────────────────────────────────────────
+
+
+class OllamaModel(BaseModel):
+    name: str
+    size: int | None = None
+    modified_at: str | None = None
+    is_loaded: bool = False
+
+
+class ModelsResponse(BaseModel):
+    models: list[OllamaModel]
+    default_model: str
+
+
+class LLMPreset(BaseModel):
+    name: str
+    label: str
+    enable_thinking: bool
+    thinking_budget: int | None
+    temperature: float
+    top_p: float
+    min_p: float
+    repetition_penalty: float
+    max_tokens: int
+
+
+class PresetsResponse(BaseModel):
+    presets: list[LLMPreset]
+    default_preset: str

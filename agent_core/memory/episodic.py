@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_core.llm.client import llm_client
+from agent_core.llm.params import LLMParams
 from agent_core.llm.embedding import embedding_model
 from agent_core.prompts import (
     render_episodic_consolidation_initial,
@@ -77,7 +78,11 @@ class EpisodicMemory:
 
         result = await llm_client.complete(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=200,
+            params=LLMParams(
+                model=agent_config.llm_model,
+                temperature=0.3,
+                max_tokens=1000,
+            ),
         )
         summary = result["content"].strip()
 

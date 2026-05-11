@@ -2,9 +2,11 @@ from opentelemetry import trace
 from opentelemetry.trace import StatusCode
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent_core.config import agent_config
 from agent_core.llm.prompt import token_estimate
 from agent_core.rag.retrieval import retrieve
 from shared.logger import logger
+from shared.schemas import RagParams
 
 _tracer = trace.get_tracer("mimir.rag.context")
 
@@ -20,15 +22,27 @@ async def retrieve_rag_context(
     query: str,
     db: AsyncSession,
     max_tokens: int,
+    rag_params: RagParams | None = None,
 ) -> tuple[str, int, list[dict]]:
     """Retrieve, budget, and format RAG chunks.
 
     Returns (context_string, chunks_used, rag_sources) where rag_sources is a list
     of source metadata dicts suitable for the WS ``done`` event.
     """
+    top_k = (
+        rag_params.top_k
+        if (rag_params is not None and rag_params.top_k is not None)
+        else agent_config.rag_top_k
+    )
+    threshold = (
+        rag_params.threshold
+        if (rag_params is not None and rag_params.threshold is not None)
+        else agent_config.rag_threshold
+    )
+
     with _tracer.start_as_current_span("rag.context") as span:
         try:
-            raw = await retrieve(query, db)
+            raw = await retrieve(query, db, top_k=top_k, threshold=threshold)
             raw_sorted = sorted(raw, key=lambda r: r[1].get("score", 0), reverse=True)
 
             sections: list[str] = []

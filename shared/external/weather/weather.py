@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import yaml
 
@@ -83,6 +85,7 @@ async def _get_forecast(latitude: float, longitude: float) -> dict:
                 "timezone": "auto",
                 "forecast_days": 7,
             },
+            timeout=60,
         )
         response.raise_for_status()
 
@@ -140,6 +143,7 @@ async def _get_today_weather(latitude: float, longitude: float) -> dict:
                 "timezone": "auto",
                 "forecast_hours": 24,
             },
+            timeout=60,
         )
         response.raise_for_status()
         data = response.json()
@@ -158,8 +162,10 @@ async def get_weather_data(config_path: str) -> dict:
     for location in config["locations"]:
         latitude = location["latitude"]
         longitude = location["longitude"]
-        forecast = await _get_forecast(latitude, longitude)
-        today_weather = await _get_today_weather(latitude, longitude)
+        [forecast, today_weather] = await asyncio.gather(
+            _get_forecast(latitude, longitude),
+            _get_today_weather(latitude, longitude),
+        )
         weather_data[location["name"]] = {
             "coordinates": {"latitude": latitude, "longitude": longitude},
             "forecast": forecast,
@@ -181,5 +187,5 @@ async def get_weather_data(config_path: str) -> dict:
 if __name__ == "__main__":
     import asyncio
 
-    weather_data = asyncio.run(get_weather_data("scratch/weather_config.yaml"))
+    weather_data = asyncio.run(get_weather_data("config/weather_config.yaml"))
     print(weather_data)

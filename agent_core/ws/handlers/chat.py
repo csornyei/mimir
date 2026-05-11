@@ -5,10 +5,21 @@ from opentelemetry import trace
 
 from agent_core.agent.context import ChatContext
 from agent_core.agent.conversation import conversation_manager
+from agent_core.agent.events import (
+    AgentEvent,
+    ApprovalRequired,
+    ResponseToken,
+    ThinkingToken,
+    ToolDone,
+    ToolPending,
+    ToolStart,
+)
 from agent_core.agent.llm_dispatch import run_llm
 from agent_core.agent.tool_schema import tool_schema_registry
+from agent_core.agent.types import RunContext
 from agent_core.config import agent_config
 from agent_core.llm.messages import build_messages
+from agent_core.llm.params import llm_params_from_settings
 from agent_core.llm.prompt import format_episodic_context
 from agent_core.memory.episodic import EpisodicMemory
 from agent_core.memory.semantic import SemanticMemory
@@ -70,13 +81,7 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
             )
             return
 
-        temperature = settings.temperature if settings else None
-        max_tokens = settings.max_tokens if settings else None
-        top_p = settings.top_p if settings else None
-        min_p = settings.min_p if settings else None
-        repetition_penalty = settings.repetition_penalty if settings else None
-        enable_thinking = settings.enable_thinking if settings else None
-        thinking_budget = settings.thinking_budget if settings else None
+        params = llm_params_from_settings(settings)
 
         t_start = time.monotonic()
         _conv_id: str | None = None
@@ -107,7 +112,7 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
 
                 async with get_session() as db:
                     rag_context, _chunks_used, rag_sources = await retrieve_rag_context(
-                        req.message, db, agent_config.rag_max_tokens
+                        req.message, db, agent_config.rag_max_tokens, rag_params=req.rag
                     )
                     episodic_memories_raw = await EpisodicMemory(db).retrieve(
                         req.message, k=agent_config.episodic_retrieval_k
@@ -140,117 +145,104 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                         context, conversation_id, db, agent_config
                     )
 
-                # ── WS event callbacks ─────────────────────────────────────────
+                run_ctx = RunContext(
+                    triggered_by=f"user:{req.user_id}",
+                    conversation_id=conversation_id,
+                )
+
+                # ── Single typed event callback ────────────────────────────────
 
                 _did_stream = False
                 _did_think = False
 
-                async def on_token(delta: str) -> None:
-                    nonlocal _did_stream
-                    _did_stream = True
-                    await ws_registry.send(
-                        conversation_id,
-                        {
-                            "type": "response",
-                            "request_id": req.request_id,
-                            "conversation_id": conversation_id,
-                            "content": delta,
-                        },
-                    )
-
-                async def on_thinking_token(delta: str) -> None:
-                    nonlocal _did_think
-                    _did_think = True
-                    await ws_registry.send(
-                        conversation_id,
-                        {"type": "thinking", "content": delta},
-                    )
-
-                async def on_tool_pending(name: str, call_id: str) -> None:
-                    await ws_registry.send(
-                        conversation_id,
-                        {
-                            "type": "tool_pending",
-                            "request_id": req.request_id,
-                            "name": name,
-                            "call_id": call_id,
-                        },
-                    )
-
-                async def on_tool_start(name: str, args: dict, call_id: str) -> None:
-                    await ws_registry.send(
-                        conversation_id,
-                        {
-                            "type": "tool_call",
-                            "request_id": req.request_id,
-                            "name": name,
-                            "arguments": args,
-                            "call_id": call_id,
-                        },
-                    )
-
-                async def on_tool_done(name: str, result: str, call_id: str) -> None:
-                    await ws_registry.send(
-                        conversation_id,
-                        {
-                            "type": "tool_result",
-                            "request_id": req.request_id,
-                            "name": name,
-                            "result": result,
-                            "call_id": call_id,
-                        },
-                    )
-
-                async def on_approval_required(
-                    action_id: str, tool_name: str, args: dict
-                ) -> None:
-                    await ws_registry.send(
-                        conversation_id,
-                        {
-                            "type": "approval_required",
-                            "request_id": req.request_id,
-                            "action_id": action_id,
-                            "tool_name": tool_name,
-                            "arguments": args,
-                        },
-                    )
+                async def on_event(event: AgentEvent) -> None:
+                    nonlocal _did_stream, _did_think
+                    match event:
+                        case ResponseToken(content=c):
+                            _did_stream = True
+                            await ws_registry.send(
+                                conversation_id,
+                                {
+                                    "type": "response",
+                                    "request_id": req.request_id,
+                                    "conversation_id": conversation_id,
+                                    "content": c,
+                                },
+                            )
+                        case ThinkingToken(content=c):
+                            _did_think = True
+                            await ws_registry.send(
+                                conversation_id,
+                                {"type": "thinking", "content": c},
+                            )
+                        case ToolPending(name=n, call_id=cid):
+                            await ws_registry.send(
+                                conversation_id,
+                                {
+                                    "type": "tool_pending",
+                                    "request_id": req.request_id,
+                                    "name": n,
+                                    "call_id": cid,
+                                },
+                            )
+                        case ToolStart(name=n, call_id=cid, arguments=a):
+                            await ws_registry.send(
+                                conversation_id,
+                                {
+                                    "type": "tool_call",
+                                    "request_id": req.request_id,
+                                    "name": n,
+                                    "arguments": a,
+                                    "call_id": cid,
+                                },
+                            )
+                        case ToolDone(name=n, call_id=cid, result=r):
+                            await ws_registry.send(
+                                conversation_id,
+                                {
+                                    "type": "tool_result",
+                                    "request_id": req.request_id,
+                                    "name": n,
+                                    "result": r,
+                                    "call_id": cid,
+                                },
+                            )
+                        case ApprovalRequired(action_id=aid, tool_name=tn, arguments=a):
+                            await ws_registry.send(
+                                conversation_id,
+                                {
+                                    "type": "approval_required",
+                                    "request_id": req.request_id,
+                                    "action_id": aid,
+                                    "tool_name": tn,
+                                    "arguments": a,
+                                },
+                            )
 
                 # ── Run LLM ───────────────────────────────────────────────────
 
-                response, thinking, usage = await run_llm(
+                result = await run_llm(
                     bundle,
                     context.tools,
-                    triggered_by=f"user:{req.user_id}",
-                    conversation_id=conversation_id,
-                    on_token=on_token,
-                    on_thinking_token=on_thinking_token,
-                    on_tool_pending=on_tool_pending,
-                    on_tool_start=on_tool_start,
-                    on_tool_done=on_tool_done,
-                    on_approval_required=on_approval_required,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    top_p=top_p,
-                    min_p=min_p,
-                    repetition_penalty=repetition_penalty,
-                    enable_thinking=enable_thinking,
-                    thinking_budget=thinking_budget,
+                    context=run_ctx,
+                    params=params,
+                    on_event=on_event,
                 )
 
                 async with get_session() as db:
                     await conversation_manager.add_message(
-                        db, conversation_id, "assistant", response
+                        db, conversation_id, "assistant", result.content
                     )
 
                 latency_ms = int((time.monotonic() - t_start) * 1000)
-                span.set_attribute("chat.response_length", len(response))
+                span.set_attribute("chat.response_length", len(result.content))
                 span.set_attribute("chat.latency_ms", latency_ms)
 
                 # ── thinking event (non-streaming path only) ──────────────────
-                if not _did_think and thinking:
+                if not _did_think and result.thinking:
                     await ws_registry.send(
                         conversation_id,
-                        {"type": "thinking", "content": thinking},
+                        {"type": "thinking", "content": result.thinking},
                     )
 
                 # ── response event (non-streaming path only) ──────────────────
@@ -261,12 +253,12 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                             "type": "response",
                             "request_id": req.request_id,
                             "conversation_id": conversation_id,
-                            "content": response,
+                            "content": result.content,
                         },
                     )
 
                 # ── done event with metadata ──────────────────────────────────
-                thinking_tokens = len(thinking) // 4 if thinking else 0
+                thinking_tokens = len(result.thinking) // 4 if result.thinking else 0
                 episodic_for_metadata = [
                     {
                         "summary": m.get("summary", ""),
@@ -285,8 +277,8 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
                         "request_id": req.request_id,
                         "metadata": {
                             "thinking_tokens": thinking_tokens,
-                            "response_tokens": usage.get("completion_tokens", 0),
-                            "prompt_tokens": usage.get("prompt_tokens", 0),
+                            "response_tokens": result.usage.get("completion_tokens", 0),
+                            "prompt_tokens": result.usage.get("prompt_tokens", 0),
                             "latency_ms": latency_ms,
                             "rag_sources": rag_sources,
                             "episodic_memories": episodic_for_metadata,

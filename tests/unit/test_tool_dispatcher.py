@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 from agent_core.agent.tools import ToolLoop
+from agent_core.agent.types import RunContext
 
 
 def _tool_call(name: str, args: dict | None = None, call_id: str = "c1") -> dict:
@@ -60,7 +61,7 @@ async def test_write_tool_requests_approval_not_dispatch(mocker):
                     "destructive": True,
                 }
             ],
-            triggered_by="user:U123",
+            context=RunContext(triggered_by="user:U123"),
         )
 
     dispatch_mock.assert_not_awaited()
@@ -68,7 +69,7 @@ async def test_write_tool_requests_approval_not_dispatch(mocker):
     call_kwargs = approval_mock.call_args.kwargs
     assert call_kwargs["payload"]["tool_name"] == "restricted_tool"
     assert call_kwargs["triggered_by"] == "user:U123"
-    assert result[0] == "Approval requested for you."
+    assert result.content == "Approval requested for you."
 
 
 @pytest.mark.asyncio
@@ -96,11 +97,11 @@ async def test_read_tool_dispatches_directly(mocker):
                     "destructive": False,
                 }
             ],
-            triggered_by="user:U123",
+            context=RunContext(triggered_by="user:U123"),
         )
 
     dispatch_mock.assert_awaited_once()
-    assert result[0] == "No pods running."
+    assert result.content == "No pods running."
 
 
 @pytest.mark.asyncio

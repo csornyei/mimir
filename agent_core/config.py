@@ -17,6 +17,8 @@ class AgentConfig(SharedConfig):
     conversation_window_max: int = 20
 
     rag_max_tokens: int = 2000
+    rag_top_k: int = 5
+    rag_threshold: float = 0.6
     episodic_max_tokens: int = 600
     semantic_memory_max_tokens: int = 1500
 
@@ -50,6 +52,9 @@ class AgentConfig(SharedConfig):
     morning_brief_channel_id: str | None = None
     morning_brief_hour: int = 7
     newspaper_channel_id: str | None = None
+
+    llm_scheduler_model: str | None = None
+    llm_presets_path: str = "config/presets.yaml"
 
 
 agent_config = AgentConfig()

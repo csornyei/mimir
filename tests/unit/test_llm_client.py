@@ -4,6 +4,7 @@ import pytest
 from httpx import HTTPStatusError, Request, Response
 
 from agent_core.llm.client import LLMClient
+from agent_core.llm.params import LLMParams
 
 
 def _413_error() -> HTTPStatusError:
@@ -128,7 +129,9 @@ async def test_complete_custom_temperature(mocker):
     http.post.return_value = _ok_response("ok")
     client = _make_client(http)
 
-    await client.complete([{"role": "user", "content": "Hi"}], temperature=0.1)
+    await client.complete(
+        [{"role": "user", "content": "Hi"}], params=LLMParams(temperature=0.1)
+    )
 
     payload = http.post.call_args[1]["json"]
     assert payload["temperature"] == 0.1
@@ -139,7 +142,9 @@ async def test_complete_custom_max_tokens(mocker):
     http.post.return_value = _ok_response("ok")
     client = _make_client(http)
 
-    await client.complete([{"role": "user", "content": "Hi"}], max_tokens=512)
+    await client.complete(
+        [{"role": "user", "content": "Hi"}], params=LLMParams(max_tokens=512)
+    )
 
     payload = http.post.call_args[1]["json"]
     assert payload["max_tokens"] == 512
