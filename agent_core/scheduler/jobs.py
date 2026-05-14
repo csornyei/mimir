@@ -7,9 +7,7 @@ from opentelemetry import trace
 from opentelemetry.trace import SpanKind, StatusCode
 
 from agent_core.agent.approval import manager as approval_manager
-from agent_core.config import agent_config
 from shared.db import get_session
-from agent_core.scheduler.briefing.job import run_morning_briefing
 from agent_core.scheduler.memory.consolidate import consolidate_idle_threads
 from agent_core.scheduler.rss.job import run_digest
 
@@ -24,18 +22,6 @@ async def process_approval_timeouts() -> None:
         try:
             async with get_session() as session:
                 await approval_manager.process_timeouts(session)
-        except Exception as e:
-            span.set_status(StatusCode.ERROR, str(e))
-            raise
-
-
-async def send_morning_briefing() -> None:
-    with _tracer.start_as_current_span(
-        "scheduler.morning_briefing", kind=SpanKind.INTERNAL
-    ) as span:
-        span.set_attribute("job.name", "morning_briefing")
-        try:
-            await run_morning_briefing()
         except Exception as e:
             span.set_status(StatusCode.ERROR, str(e))
             raise
@@ -116,12 +102,6 @@ def create_scheduler() -> AsyncIOScheduler:
         process_approval_timeouts,
         IntervalTrigger(minutes=1),
         id="process_approval_timeouts",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        send_morning_briefing,
-        CronTrigger(hour=agent_config.morning_brief_hour, timezone="UTC"),
-        id="morning_briefing",
         replace_existing=True,
     )
     scheduler.add_job(

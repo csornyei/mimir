@@ -3,14 +3,16 @@
 from agent_core.prompts import (
     render_episodic_consolidation_initial,
     render_episodic_consolidation_update,
-    render_morning_briefing_system,
-    render_morning_briefing_user,
     render_rss_filter_system,
     render_rss_filter_user,
     render_system_prompt,
     render_tool_instructions,
 )
 
+from jobs.morning_briefing.prompt import (
+    render_morning_briefing_system,
+    render_morning_briefing_user,
+)
 
 # ---------------------------------------------------------------------------
 # render_system_prompt
@@ -118,13 +120,13 @@ def test_tool_instructions_function_format_tools():
 
 
 def test_morning_briefing_system_without_weather():
-    result = render_morning_briefing_system(weather_data=False)
+    result = render_morning_briefing_system(weather_data=False, user="Alice")
     assert "morning briefing" in result.lower()
     assert "weather" not in result.lower()
 
 
 def test_morning_briefing_system_with_weather():
-    result = render_morning_briefing_system(weather_data=True)
+    result = render_morning_briefing_system(weather_data=True, user="Alice")
     assert "weather" in result.lower()
 
 

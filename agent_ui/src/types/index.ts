@@ -16,7 +16,6 @@ export interface LLMSettings {
 }
 
 export interface LLMPreset {
-    name: string;
     label: string;
     enable_thinking: boolean;
     thinking_budget: number | null;

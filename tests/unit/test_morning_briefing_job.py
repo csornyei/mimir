@@ -2,29 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent_core.scheduler.briefing.job import run_morning_briefing
-
-
-def _make_agent_config(
-    caldav_url="https://cal.example.com",
-    caldav_username="user",
-    caldav_password="pass",
-    morning_brief_channel_id="C123456",
-    slack_bot_token="xoxb-test",
-    slack_user_id="U123456",
-    morning_brief_hour=7,
-    weather_config_path=None,
-):
-    cfg = MagicMock()
-    cfg.caldav_url = caldav_url
-    cfg.caldav_username = caldav_username
-    cfg.caldav_password = caldav_password
-    cfg.morning_brief_channel_id = morning_brief_channel_id
-    cfg.slack_bot_token = slack_bot_token
-    cfg.slack_user_id = slack_user_id
-    cfg.morning_brief_hour = morning_brief_hour
-    cfg.weather_config_path = weather_config_path
-    return cfg
+from jobs.morning_briefing.main import run_morning_briefing
+from shared.schemas import LLMSettings
 
 
 SAMPLE_EVENTS = [
@@ -39,154 +18,144 @@ SAMPLE_EVENTS = [
 ]
 
 
-@pytest.mark.asyncio
-async def test_run_morning_briefing_skips_when_channel_id_missing():
-    agent_cfg = _make_agent_config(morning_brief_channel_id=None)
-    mock_dav_instance = AsyncMock()
-    mock_dav_instance.get_events.return_value = []
-    mock_dav_instance.get_todos.return_value = []
-    mock_slack_instance = AsyncMock()
-    mock_session = AsyncMock()
-
-    with (
-        patch(
-            "agent_core.scheduler.briefing.job.agent_config",
-            agent_cfg,
-        ),
-        patch(
-            "agent_core.scheduler.briefing.job.CalDAVClient",
-            return_value=mock_dav_instance,
-        ),
-        patch("agent_core.scheduler.briefing.job.llm_client") as mock_llm,
-        patch(
-            "agent_core.scheduler.briefing.job.AsyncWebClient",
-            return_value=mock_slack_instance,
-        ),
-        patch("agent_core.scheduler.briefing.job.get_session") as mock_session_ctx,
-        patch("agent_core.scheduler.briefing.job.conversation_manager"),
-    ):
-        mock_llm.complete = AsyncMock(
-            return_value={
-                "content": "Good morning!",
-                "tool_calls": [],
-                "finish_reason": "stop",
-            }
-        )
-        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
-        await run_morning_briefing()
-
-    mock_slack_instance.chat_postMessage.assert_not_called()
+def _make_job_config(
+    timezone: str | None = "Europe/Amsterdam",
+    caldav_url: str | None = "https://cal.example.com",
+    caldav_username: str | None = "user",
+    caldav_password: str | None = "pass",
+    weather_config_path: str | None = "/etc/weather.yaml",
+    llm_model: str | None = "gemma4:26b",
+    llm_presets_path: str | None = "config/presets.yaml",
+    ntfy_url: str | None = "https://ntfy.example.com",
+    ntfy_morning_brief_topic: str | None = "morning-brief",
+    mimir_host: str | None = "https://mimir.example.com",
+    agent_core_api_url: str | None = "http://localhost:8000",
+    owner_name: str = "Alice",
+    service_name: str = "mimir-jobs",
+) -> MagicMock:
+    cfg = MagicMock()
+    cfg.timezone = timezone
+    cfg.caldav_url = caldav_url
+    cfg.caldav_username = caldav_username
+    cfg.caldav_password = caldav_password
+    cfg.weather_config_path = weather_config_path
+    cfg.llm_model = llm_model
+    cfg.llm_presets_path = llm_presets_path
+    cfg.ntfy_url = ntfy_url
+    cfg.ntfy_morning_brief_topic = ntfy_morning_brief_topic
+    cfg.mimir_host = mimir_host
+    cfg.agent_core_api_url = agent_core_api_url
+    cfg.owner_name = owner_name
+    cfg.service_name = service_name
+    return cfg
 
 
-@pytest.mark.asyncio
-async def test_run_morning_briefing_skips_when_caldav_url_missing():
-    with (
-        patch(
-            "agent_core.scheduler.briefing.job.agent_config",
-            _make_agent_config(caldav_url=None),
-        ),
-        patch("agent_core.scheduler.briefing.job.CalDAVClient") as mock_dav,
-    ):
-        await run_morning_briefing()
-        mock_dav.assert_not_called()
+def _mock_http_client() -> tuple[MagicMock, AsyncMock]:
+    """Returns (mock_class, mock_instance) for httpx.AsyncClient."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock(return_value=None)
+    mock_instance = AsyncMock()
+    mock_instance.post = AsyncMock(return_value=mock_response)
+    mock_cls = MagicMock()
+    mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+    mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+    return mock_cls, mock_instance
 
 
 @pytest.mark.asyncio
-async def test_run_morning_briefing_skips_when_caldav_username_missing():
+async def test_run_morning_briefing_skips_when_caldav_url_missing() -> None:
     with (
         patch(
-            "agent_core.scheduler.briefing.job.agent_config",
-            _make_agent_config(caldav_username=None),
+            "jobs.morning_briefing.main.job_config", _make_job_config(caldav_url=None)
         ),
-        patch("agent_core.scheduler.briefing.job.CalDAVClient") as mock_dav,
+        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_run_morning_briefing_skips_when_caldav_password_missing():
+async def test_run_morning_briefing_skips_when_caldav_username_missing() -> None:
     with (
         patch(
-            "agent_core.scheduler.briefing.job.agent_config",
-            _make_agent_config(caldav_password=None),
+            "jobs.morning_briefing.main.job_config",
+            _make_job_config(caldav_username=None),
         ),
-        patch("agent_core.scheduler.briefing.job.CalDAVClient") as mock_dav,
+        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_run_morning_briefing_posts_llm_response_to_slack():
-    agent_cfg = _make_agent_config()
-    mock_dav_instance = AsyncMock()
-    mock_dav_instance.get_events.return_value = SAMPLE_EVENTS
-    mock_dav_instance.get_todos.return_value = []
-    mock_slack_instance = AsyncMock()
-    mock_session = AsyncMock()
-
+async def test_run_morning_briefing_skips_when_caldav_password_missing() -> None:
     with (
-        patch("agent_core.scheduler.briefing.job.agent_config", agent_cfg),
         patch(
-            "agent_core.scheduler.briefing.job.CalDAVClient",
-            return_value=mock_dav_instance,
+            "jobs.morning_briefing.main.job_config",
+            _make_job_config(caldav_password=None),
         ),
-        patch("agent_core.scheduler.briefing.job.llm_client") as mock_llm,
-        patch(
-            "agent_core.scheduler.briefing.job.AsyncWebClient",
-            return_value=mock_slack_instance,
-        ),
-        patch("agent_core.scheduler.briefing.job.get_session") as mock_session_ctx,
-        patch(
-            "agent_core.scheduler.briefing.job.conversation_manager",
-            new_callable=AsyncMock,
-        ),
+        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav,
     ):
-        mock_llm.complete = AsyncMock(
-            return_value={
-                "content": "You have a standup at 9.",
-                "tool_calls": [],
-                "finish_reason": "stop",
-            }
-        )
-        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
         await run_morning_briefing()
-
-    mock_slack_instance.chat_postMessage.assert_called_once_with(
-        channel="C123456",
-        text=f"*Good Morning <@{agent_cfg.slack_user_id}>! Here's your briefing for today:*\n\nYou have a standup at 9.",
-    )
+        mock_dav.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_run_morning_briefing_creates_caldav_client_with_config_creds():
-    agent_cfg = _make_agent_config()
-    mock_dav_instance = AsyncMock()
-    mock_dav_instance.get_events.return_value = []
-    mock_slack_instance = AsyncMock()
+async def test_run_morning_briefing_skips_when_agent_core_url_missing() -> None:
+    with (
+        patch(
+            "jobs.morning_briefing.main.job_config",
+            _make_job_config(agent_core_api_url=None),
+        ),
+        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav,
+    ):
+        await run_morning_briefing()
+        mock_dav.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_run_morning_briefing_calls_agent_core_api() -> None:
+    mock_cls, mock_instance = _mock_http_client()
 
     with (
-        patch("agent_core.scheduler.briefing.job.agent_config", agent_cfg),
+        patch("jobs.morning_briefing.main.job_config", _make_job_config()),
+        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav_class,
         patch(
-            "agent_core.scheduler.briefing.job.CalDAVClient",
-            return_value=mock_dav_instance,
-        ) as mock_dav_class,
-        patch("agent_core.scheduler.briefing.job.llm_client") as mock_llm,
-        patch(
-            "agent_core.scheduler.briefing.job.AsyncWebClient",
-            return_value=mock_slack_instance,
+            "jobs.morning_briefing.main.prepare_llm_settings",
+            return_value=LLMSettings(),
         ),
+        patch("jobs.morning_briefing.main.send_ntfy", new=AsyncMock()),
+        patch("httpx.AsyncClient", mock_cls),
     ):
-        mock_llm.complete = AsyncMock(
-            return_value={
-                "content": "Good morning!",
-                "tool_calls": [],
-                "finish_reason": "stop",
-            }
-        )
+        mock_dav_instance = AsyncMock()
+        mock_dav_instance.get_events = AsyncMock(return_value=SAMPLE_EVENTS)
+        mock_dav_instance.get_todos = AsyncMock(return_value=[])
+        mock_dav_class.return_value = mock_dav_instance
+
+        await run_morning_briefing()
+
+    mock_instance.post.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_run_morning_briefing_creates_caldav_client_with_config_creds() -> None:
+    mock_cls, _ = _mock_http_client()
+
+    with (
+        patch("jobs.morning_briefing.main.job_config", _make_job_config()),
+        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav_class,
+        patch(
+            "jobs.morning_briefing.main.prepare_llm_settings",
+            return_value=LLMSettings(),
+        ),
+        patch("jobs.morning_briefing.main.send_ntfy", new=AsyncMock()),
+        patch("httpx.AsyncClient", mock_cls),
+    ):
+        mock_dav_instance = AsyncMock()
+        mock_dav_instance.get_events = AsyncMock(return_value=[])
+        mock_dav_instance.get_todos = AsyncMock(return_value=[])
+        mock_dav_class.return_value = mock_dav_instance
+
         await run_morning_briefing()
 
     mock_dav_class.assert_called_once_with(
@@ -197,46 +166,49 @@ async def test_run_morning_briefing_creates_caldav_client_with_config_creds():
 
 
 @pytest.mark.asyncio
-async def test_run_morning_briefing_does_not_raise_on_caldav_error():
-    mock_dav_instance = AsyncMock()
-    mock_dav_instance.get_events.side_effect = Exception("Connection refused")
-    mock_slack_instance = AsyncMock()
+async def test_run_morning_briefing_does_not_raise_on_caldav_error() -> None:
+    mock_cls, _ = _mock_http_client()
 
     with (
-        patch("agent_core.scheduler.briefing.job.agent_config", _make_agent_config()),
+        patch("jobs.morning_briefing.main.job_config", _make_job_config()),
+        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav_class,
         patch(
-            "agent_core.scheduler.briefing.job.CalDAVClient",
-            return_value=mock_dav_instance,
+            "jobs.morning_briefing.main.prepare_llm_settings",
+            return_value=LLMSettings(),
         ),
-        patch(
-            "agent_core.scheduler.briefing.job.AsyncWebClient",
-            return_value=mock_slack_instance,
-        ),
+        patch("jobs.morning_briefing.main.send_ntfy", new=AsyncMock()),
+        patch("httpx.AsyncClient", mock_cls),
     ):
-        await run_morning_briefing()  # must not raise
+        mock_dav_instance = AsyncMock()
+        mock_dav_instance.get_events = AsyncMock(
+            side_effect=Exception("Connection refused")
+        )
+        mock_dav_instance.get_todos = AsyncMock(return_value=[])
+        mock_dav_class.return_value = mock_dav_instance
 
-    mock_slack_instance.chat_postMessage.assert_not_called()
+        await run_morning_briefing()  # must not raise
 
 
 @pytest.mark.asyncio
-async def test_run_morning_briefing_does_not_raise_on_llm_error():
-    mock_dav_instance = AsyncMock()
-    mock_dav_instance.get_events.return_value = SAMPLE_EVENTS
-    mock_slack_instance = AsyncMock()
+async def test_run_morning_briefing_does_not_raise_on_http_error() -> None:
+    mock_http_client = AsyncMock()
+    mock_http_client.post = AsyncMock(side_effect=Exception("Connection refused"))
+    mock_cls = MagicMock()
+    mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_http_client)
+    mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
     with (
-        patch("agent_core.scheduler.briefing.job.agent_config", _make_agent_config()),
+        patch("jobs.morning_briefing.main.job_config", _make_job_config()),
+        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav_class,
         patch(
-            "agent_core.scheduler.briefing.job.CalDAVClient",
-            return_value=mock_dav_instance,
+            "jobs.morning_briefing.main.prepare_llm_settings",
+            return_value=LLMSettings(),
         ),
-        patch("agent_core.scheduler.briefing.job.llm_client") as mock_llm,
-        patch(
-            "agent_core.scheduler.briefing.job.AsyncWebClient",
-            return_value=mock_slack_instance,
-        ),
+        patch("httpx.AsyncClient", mock_cls),
     ):
-        mock_llm.complete = AsyncMock(side_effect=Exception("LLM unavailable"))
-        await run_morning_briefing()  # must not raise
+        mock_dav_instance = AsyncMock()
+        mock_dav_instance.get_events = AsyncMock(return_value=SAMPLE_EVENTS)
+        mock_dav_instance.get_todos = AsyncMock(return_value=[])
+        mock_dav_class.return_value = mock_dav_instance
 
-    mock_slack_instance.chat_postMessage.assert_not_called()
+        await run_morning_briefing()  # must not raise

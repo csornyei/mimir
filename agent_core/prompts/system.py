@@ -1,4 +1,4 @@
-from agent_core.prompts.loader import render
+from shared.prompts.loader import render
 
 
 def render_tool_instructions(tools: list[dict] | None = None) -> str:

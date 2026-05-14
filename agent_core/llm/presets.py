@@ -28,10 +28,13 @@ def load_presets() -> PresetsResponse:
         return _cache
 
     try:
-        presets = [LLMPreset.model_validate(p) for p in raw.get("presets", [])]
+        raw_presets: dict = raw.get("presets") or {}
+        if not raw_presets:
+            raise ValueError("presets dict is empty")
+        presets = {
+            name: LLMPreset.model_validate(data) for name, data in raw_presets.items()
+        }
         default_preset = raw.get("default_preset", "balanced")
-        if not presets:
-            raise ValueError("presets list is empty")
         _cache = PresetsResponse(presets=presets, default_preset=default_preset)
     except Exception as exc:
         logger.error("presets_validation_error", error=str(exc))
@@ -43,9 +46,8 @@ def load_presets() -> PresetsResponse:
 def _default_presets() -> PresetsResponse:
     """Hardcoded fallback so the UI is never broken by a bad config file."""
     return PresetsResponse(
-        presets=[
-            LLMPreset(
-                name="balanced",
+        presets={
+            "balanced": LLMPreset(
                 label="Balanced",
                 enable_thinking=True,
                 thinking_budget=2000,
@@ -55,6 +57,6 @@ def _default_presets() -> PresetsResponse:
                 repetition_penalty=1.0,
                 max_tokens=4096,
             )
-        ],
+        },
         default_preset="balanced",
     )

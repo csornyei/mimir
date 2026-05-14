@@ -5,7 +5,7 @@ import type { Mode } from "@/store";
 export function ModeSelector() {
     const { settings, setMode, presets } = useMimirStore();
 
-    const activePreset = presets.find((p) => p.name === settings.mode);
+    const activePreset = presets[settings.mode];
     const hint = activePreset
         ? `${activePreset.temperature} temp · ${
               activePreset.enable_thinking
@@ -27,7 +27,7 @@ export function ModeSelector() {
                 }}
                 className="grid w-full grid-cols-2 gap-1"
             >
-                {presets.map(({ name, label }) => (
+                {Object.entries(presets).map(([name, { label }]) => (
                     <ToggleGroupItem
                         key={name}
                         value={name}

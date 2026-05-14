@@ -1,4 +1,4 @@
-from agent_core.prompts.loader import render
+from shared.prompts.loader import render
 
 
 def render_episodic_consolidation_initial(transcript: str) -> str:

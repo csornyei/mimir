@@ -1,6 +1,6 @@
 from typing import Any
 
-from agent_core.prompts.loader import render
+from shared.prompts.loader import render
 
 
 def render_rss_filter_system(n_picks: int) -> str:

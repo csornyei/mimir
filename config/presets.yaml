@@ -1,7 +1,7 @@
 default_preset: balanced
 
 presets:
-  - name: precise
+  precise:
     label: Precise
     enable_thinking: true
     thinking_budget: 2000
@@ -11,7 +11,7 @@ presets:
     repetition_penalty: 1.0
     max_tokens: 4096
 
-  - name: balanced
+  balanced:
     label: Balanced
     enable_thinking: true
     thinking_budget: 2000
@@ -21,7 +21,7 @@ presets:
     repetition_penalty: 1.0
     max_tokens: 4096
 
-  - name: creative
+  creative:
     label: Creative
     enable_thinking: true
     thinking_budget: 8000
@@ -31,7 +31,7 @@ presets:
     repetition_penalty: 1.05
     max_tokens: 4096
 
-  - name: fast
+  fast:
     label: Fast
     enable_thinking: false
     thinking_budget: 0

@@ -16,8 +16,8 @@ import type {
 
 export type Mode = "precise" | "balanced" | "creative" | "fast";
 
+const FALLBACK_PRESET_NAME = "balanced";
 const FALLBACK_PRESET: LLMPreset = {
-    name: "balanced",
     label: "Balanced",
     enable_thinking: true,
     thinking_budget: 2000,
@@ -28,9 +28,13 @@ const FALLBACK_PRESET: LLMPreset = {
     max_tokens: 4096,
 };
 
-function presetToSettings(preset: LLMPreset, model?: string): LLMSettings {
+function presetToSettings(
+    name: string,
+    preset: LLMPreset,
+    model?: string
+): LLMSettings {
     return {
-        mode: preset.name as Mode,
+        mode: name as Mode,
         model,
         enable_thinking: preset.enable_thinking,
         thinking_budget: preset.thinking_budget,
@@ -100,7 +104,7 @@ interface MimirStore {
     setDebugMode: (on: boolean) => void;
 
     // Presets & models (fetched)
-    presets: LLMPreset[];
+    presets: Record<string, LLMPreset>;
     models: OllamaModel[];
     fetchPresets: () => Promise<void>;
     fetchModels: () => Promise<void>;
@@ -557,15 +561,14 @@ export const useMimirStore = create<MimirStore>()(
             },
 
             // Settings
-            settings: presetToSettings(FALLBACK_PRESET),
+            settings: presetToSettings(FALLBACK_PRESET_NAME, FALLBACK_PRESET),
             thinkingBudgetDirty: false,
 
             setMode: (mode) => {
                 const { presets, settings } = get();
-                const preset =
-                    presets.find((p) => p.name === mode) ?? FALLBACK_PRESET;
+                const preset = presets[mode] ?? FALLBACK_PRESET;
                 set({
-                    settings: presetToSettings(preset, settings.model),
+                    settings: presetToSettings(mode, preset, settings.model),
                     thinkingBudgetDirty: false,
                 });
             },
@@ -606,7 +609,7 @@ export const useMimirStore = create<MimirStore>()(
             setDebugMode: (on) => set({ debugMode: on }),
 
             // Presets & models
-            presets: [],
+            presets: {},
             models: [],
 
             fetchPresets: async () => {
@@ -614,21 +617,24 @@ export const useMimirStore = create<MimirStore>()(
                     const res = await fetch("/api/presets");
                     if (!res.ok) return;
                     const data = await res.json();
-                    const presets: LLMPreset[] = data.presets ?? [];
+                    const presets: Record<string, LLMPreset> =
+                        data.presets ?? {};
                     const defaultPreset = data.default_preset as string;
                     set({ presets });
-                    // Apply default preset if current mode isn't in fetched list
+                    // Apply default preset if current mode isn't in fetched dict
                     const { settings } = get();
-                    const current = presets.find(
-                        (p) => p.name === settings.mode
-                    );
-                    if (!current) {
-                        const fallback =
-                            presets.find((p) => p.name === defaultPreset) ??
-                            presets[0];
-                        if (fallback) {
+                    if (!presets[settings.mode]) {
+                        const fallbackName =
+                            defaultPreset in presets
+                                ? defaultPreset
+                                : Object.keys(presets)[0];
+                        const fallback = fallbackName
+                            ? presets[fallbackName]
+                            : undefined;
+                        if (fallback && fallbackName) {
                             set({
                                 settings: presetToSettings(
+                                    fallbackName,
                                     fallback,
                                     settings.model
                                 ),
