@@ -9,5 +9,12 @@ class JobConfig(SharedConfig):
     agent_core_api_url: Optional[str] = None
     owner_name: str = "User"
 
+    # RSS digest
+    miniflux_url: Optional[str] = None
+    miniflux_username: Optional[str] = None
+    miniflux_password: Optional[str] = None
+    rss_digest_min_entries: int = 10
+    rss_digest_picks: int = 10
+
 
 job_config = JobConfig()

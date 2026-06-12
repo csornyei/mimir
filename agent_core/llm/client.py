@@ -51,7 +51,7 @@ class LLMClient:
             headers["Authorization"] = f"Bearer {agent_config.api_key}"
 
         self._client = AsyncClient(
-            base_url=agent_config.llm_base_url, headers=headers, timeout=120.0
+            base_url=agent_config.llm_base_url, headers=headers, timeout=300.0
         )
 
     def _build_payload(
@@ -80,9 +80,13 @@ class LLMClient:
             payload["enable_thinking"] = params.enable_thinking
         if params.thinking_budget is not None:
             payload["thinking_budget"] = params.thinking_budget
+        if params.response_format is not None:
+            payload["format"] = params.response_format
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+
+        print("LLM request Payload", payload)
         return payload
 
     async def complete(
@@ -291,7 +295,7 @@ class LLMClient:
         for attempt, msgs in enumerate(candidates):
             try:
                 payload = self._build_payload(msgs, params, tools)
-
+                print("LLM Payload", payload)
                 response = await self._client.post("/v1/chat/completions", json=payload)
                 response.raise_for_status()
                 result = response.json()

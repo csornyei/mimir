@@ -1376,6 +1376,7 @@ dev = [
 ]
 jobs = [
     { name = "caldav" },
+    { name = "miniflux" },
 ]
 mcp = [
     { name = "caldav" },
@@ -1437,7 +1438,10 @@ dev = [
     { name = "ruff", specifier = ">=0.15.9" },
     { name = "ty", specifier = ">=0.0.29" },
 ]
-jobs = [{ name = "caldav", specifier = ">=3.1.0" }]
+jobs = [
+    { name = "caldav", specifier = ">=3.1.0" },
+    { name = "miniflux", specifier = ">=1.1.6" },
+]
 mcp = [
     { name = "caldav", specifier = ">=3.1.0" },
     { name = "kr8s", specifier = ">=0.20.15" },

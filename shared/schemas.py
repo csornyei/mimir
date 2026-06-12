@@ -92,6 +92,7 @@ class LLMSettings(BaseModel):
     min_p: float = 0.05
     repetition_penalty: float = 1.0
     max_tokens: int = 4096
+    response_format: Literal["json"] | None = None
 
 
 # ── WebSocket ────────────────────────────────────────────────────────────────

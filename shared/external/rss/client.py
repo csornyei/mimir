@@ -6,7 +6,7 @@ from typing import Any
 import miniflux
 
 _PAGE_SIZE = 100
-_SUMMARY_MAX = 500
+_SUMMARY_MAX = 200
 
 
 class _HTMLStripper(HTMLParser):
@@ -25,6 +25,10 @@ def _strip_html(html: str) -> str:
     stripper = _HTMLStripper()
     stripper.feed(html)
     return stripper.get_text()
+
+
+def _strip_escape_chars(text: str) -> str:
+    return text.replace("\n", " ").replace("\r", " ").replace("\t", " ").strip()
 
 
 class RSSClient:
@@ -88,7 +92,7 @@ class RSSClient:
     def _parse_entry(self, entry: dict[str, Any]) -> dict[str, Any]:
         content = entry.get("content", "")
         if content:
-            text = _strip_html(content)
+            text = _strip_escape_chars(_strip_html(content))
             summary: str | None = text[:_SUMMARY_MAX] if text else None
         else:
             summary = None

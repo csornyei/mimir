@@ -146,8 +146,9 @@ class PendingActionModel(Base):
         server_default=ActionStatus.pending.value,
     )
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    channel_id: Mapped[str] = mapped_column(String, nullable=False)
-    message_ts: Mapped[str] = mapped_column(String, nullable=False)
+    # TODO: validate if this going to be a problem!
+    channel_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    message_ts: Mapped[str | None] = mapped_column(String, nullable=True)
     thread_ts: Mapped[str | None] = mapped_column(String, nullable=True)
     parent_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -181,8 +182,8 @@ class RssDigestEntry(Base):
         DateTime(timezone=True), nullable=False
     )
     window: Mapped[str] = mapped_column(String(10), nullable=False)
-    slack_channel_id: Mapped[str] = mapped_column(String, nullable=False)
-    slack_message_ts: Mapped[str] = mapped_column(String, nullable=False)
+    slack_channel_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    slack_message_ts: Mapped[str | None] = mapped_column(String, nullable=True)
     reaction: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     __table_args__ = (Index("ix_rss_digest_entries_message_ts", "slack_message_ts"),)

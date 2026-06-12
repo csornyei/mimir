@@ -3,16 +3,14 @@
 from agent_core.prompts import (
     render_episodic_consolidation_initial,
     render_episodic_consolidation_update,
-    render_rss_filter_system,
-    render_rss_filter_user,
     render_system_prompt,
     render_tool_instructions,
 )
-
 from jobs.morning_briefing.prompt import (
     render_morning_briefing_system,
     render_morning_briefing_user,
 )
+from jobs.rss_digest.prompt import render_rss_filter_system, render_rss_filter_user
 
 # ---------------------------------------------------------------------------
 # render_system_prompt

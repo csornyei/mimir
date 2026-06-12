@@ -3,24 +3,35 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from jobs.rss_digest.main import run_digest
+
 START = datetime(2026, 4, 17, 8, 0, tzinfo=timezone.utc)
 END = datetime(2026, 4, 17, 12, 0, tzinfo=timezone.utc)
 
-_BASE_AGENT_CONFIG = dict(
-    miniflux_url="http://miniflux",
-    miniflux_username="user",
-    miniflux_password="pass",
-    rss_digest_min_entries=10,
-    rss_digest_picks=10,
-    newspaper_channel_id="C123",
-    slack_bot_token="xoxb-test",
-)
 
-
-def _make_agent_config(**overrides):
+def _make_job_config(
+    miniflux_url: str | None = "http://miniflux",
+    miniflux_username: str | None = "user",
+    miniflux_password: str | None = "pass",
+    agent_core_api_url: str | None = "http://localhost:8000",
+    rss_digest_min_entries: int = 10,
+    rss_digest_picks: int = 10,
+    semantic_memory_path: str = "vault/memory.md",
+    ntfy_url: str | None = None,
+    ntfy_digest_topic: str | None = None,
+    mimir_host: str | None = None,
+) -> MagicMock:
     cfg = MagicMock()
-    for k, v in {**_BASE_AGENT_CONFIG, **overrides}.items():
-        setattr(cfg, k, v)
+    cfg.miniflux_url = miniflux_url
+    cfg.miniflux_username = miniflux_username
+    cfg.miniflux_password = miniflux_password
+    cfg.agent_core_api_url = agent_core_api_url
+    cfg.rss_digest_min_entries = rss_digest_min_entries
+    cfg.rss_digest_picks = rss_digest_picks
+    cfg.semantic_memory_path = semantic_memory_path
+    cfg.ntfy_url = ntfy_url
+    cfg.ntfy_digest_topic = ntfy_digest_topic
+    cfg.mimir_host = mimir_host
     return cfg
 
 
@@ -39,15 +50,10 @@ def _make_entries(n: int) -> list[dict]:
 
 
 @pytest.mark.asyncio
-async def test_run_digest_skips_when_channel_not_configured():
-    from agent_core.scheduler.rss.job import run_digest
-
+async def test_run_digest_skips_when_miniflux_not_configured() -> None:
     with (
-        patch(
-            "agent_core.scheduler.rss.job.agent_config",
-            _make_agent_config(newspaper_channel_id=None),
-        ),
-        patch("agent_core.scheduler.rss.job.RSSClient") as mock_rss,
+        patch("jobs.rss_digest.main.job_config", _make_job_config(miniflux_url=None)),
+        patch("jobs.rss_digest.main.RSSClient") as mock_rss,
     ):
         await run_digest(START, END, "08-12")
 
@@ -55,15 +61,12 @@ async def test_run_digest_skips_when_channel_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_run_digest_skips_when_miniflux_not_configured():
-    from agent_core.scheduler.rss.job import run_digest
-
+async def test_run_digest_skips_when_agent_core_url_not_configured() -> None:
     with (
         patch(
-            "agent_core.scheduler.rss.job.agent_config",
-            _make_agent_config(miniflux_url=None),
+            "jobs.rss_digest.main.job_config", _make_job_config(agent_core_api_url=None)
         ),
-        patch("agent_core.scheduler.rss.job.RSSClient") as mock_rss,
+        patch("jobs.rss_digest.main.RSSClient") as mock_rss,
     ):
         await run_digest(START, END, "08-12")
 
@@ -71,26 +74,22 @@ async def test_run_digest_skips_when_miniflux_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_run_digest_skips_when_below_threshold():
-    from agent_core.scheduler.rss.job import run_digest
-
-    mock_rss = MagicMock()
-    mock_rss.get_entries = AsyncMock(return_value=_make_entries(3))  # 3 < 10
+async def test_run_digest_skips_when_below_threshold() -> None:
+    mock_rss_instance = MagicMock()
+    mock_rss_instance.get_entries = AsyncMock(return_value=_make_entries(3))  # 3 < 10
 
     with (
-        patch("agent_core.scheduler.rss.job.agent_config", _make_agent_config()),
-        patch("agent_core.scheduler.rss.job.RSSClient", return_value=mock_rss),
-        patch("agent_core.scheduler.rss.job.post_digest_header") as mock_post,
+        patch("jobs.rss_digest.main.job_config", _make_job_config()),
+        patch("jobs.rss_digest.main.RSSClient", return_value=mock_rss_instance),
+        patch("jobs.rss_digest.main.llm_filter") as mock_filter,
     ):
         await run_digest(START, END, "08-12")
 
-    mock_post.assert_not_called()
+    mock_filter.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_run_digest_posts_header_and_picks():
-    from agent_core.scheduler.rss.job import run_digest
-
+async def test_run_digest_stores_picks() -> None:
     entries = _make_entries(15)
     picks = [
         {
@@ -101,67 +100,49 @@ async def test_run_digest_posts_header_and_picks():
         }
     ]
 
-    mock_rss = MagicMock()
-    mock_rss.get_entries = AsyncMock(return_value=entries)
-
+    mock_rss_instance = MagicMock()
+    mock_rss_instance.get_entries = AsyncMock(return_value=entries)
     mock_session = AsyncMock()
     mock_session.add = MagicMock()
 
     with (
-        patch("agent_core.scheduler.rss.job.agent_config", _make_agent_config()),
-        patch("agent_core.scheduler.rss.job.RSSClient", return_value=mock_rss),
+        patch("jobs.rss_digest.main.job_config", _make_job_config()),
+        patch("jobs.rss_digest.main.RSSClient", return_value=mock_rss_instance),
         patch(
-            "agent_core.scheduler.rss.job.summarise_feedback",
+            "jobs.rss_digest.main.summarise_feedback",
             new=AsyncMock(return_value="No feedback."),
         ),
-        patch("agent_core.scheduler.rss.job.SemanticMemory") as mock_mem,
-        patch(
-            "agent_core.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=picks)
-        ),
-        patch(
-            "agent_core.scheduler.rss.job.post_digest_header",
-            new=AsyncMock(return_value="111.000"),
-        ),
-        patch(
-            "agent_core.scheduler.rss.job.post_pick",
-            new=AsyncMock(return_value="222.000"),
-        ),
-        patch("agent_core.scheduler.rss.job.get_session") as mock_ctx,
+        patch("jobs.rss_digest.main.llm_filter", new=AsyncMock(return_value=picks)),
+        patch("jobs.rss_digest.main.get_session") as mock_ctx,
     ):
-        mock_mem.return_value.read.return_value = ""
         mock_ctx.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
         await run_digest(START, END, "08-12")
 
     mock_session.add.assert_called_once()
-    added_entry = mock_session.add.call_args[0][0]
-    assert added_entry.slack_message_ts == "222.000"
-    assert added_entry.window == "08-12"
+    added = mock_session.add.call_args[0][0]
+    assert added.window == "08-12"
+    assert added.title == "Article 0"
+    assert added.slack_message_ts is None
+    assert added.slack_channel_id is None
 
 
 @pytest.mark.asyncio
-async def test_run_digest_skips_post_when_no_picks():
-    from agent_core.scheduler.rss.job import run_digest
-
+async def test_run_digest_skips_store_when_no_picks() -> None:
     entries = _make_entries(15)
-
-    mock_rss = MagicMock()
-    mock_rss.get_entries = AsyncMock(return_value=entries)
+    mock_rss_instance = MagicMock()
+    mock_rss_instance.get_entries = AsyncMock(return_value=entries)
 
     with (
-        patch("agent_core.scheduler.rss.job.agent_config", _make_agent_config()),
-        patch("agent_core.scheduler.rss.job.RSSClient", return_value=mock_rss),
+        patch("jobs.rss_digest.main.job_config", _make_job_config()),
+        patch("jobs.rss_digest.main.RSSClient", return_value=mock_rss_instance),
         patch(
-            "agent_core.scheduler.rss.job.summarise_feedback",
+            "jobs.rss_digest.main.summarise_feedback",
             new=AsyncMock(return_value="No feedback."),
         ),
-        patch("agent_core.scheduler.rss.job.SemanticMemory") as mock_mem,
-        patch(
-            "agent_core.scheduler.rss.job.llm_filter", new=AsyncMock(return_value=[])
-        ),
-        patch("agent_core.scheduler.rss.job.post_digest_header") as mock_post,
+        patch("jobs.rss_digest.main.llm_filter", new=AsyncMock(return_value=[])),
+        patch("jobs.rss_digest.main.get_session") as mock_ctx,
     ):
-        mock_mem.return_value.read.return_value = ""
         await run_digest(START, END, "08-12")
 
-    mock_post.assert_not_called()
+    mock_ctx.assert_not_called()
