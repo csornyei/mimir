@@ -29,6 +29,7 @@ class SharedConfig(BaseSettings):
     ntfy_digest_topic: Optional[str] = None
     ntfy_morning_brief_topic: Optional[str] = None
     ntfy_messages_topic: Optional[str] = None
+    ntfy_health_topic: str = "mimir-health-coach"
     mimir_host: Optional[str] = None
 
 

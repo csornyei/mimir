@@ -189,6 +189,45 @@ services:
       - workflows
     restart: "no"
 
+  health-coach-analyze:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workflow
+      args:
+        module: health_coach.analyze
+    env_file: .env
+    environment:
+      ENV: production
+      SERVICE_NAME: health_coach_analyze
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
+      AGENT_CORE_API_URL: http://mimir-api:8000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      HEALTH_COACH_ENDPOINT_URL: https://health.tail30e7da.ts.net
+    profiles:
+      - workflows
+    restart: "no"
+
+  health-coach-summarize:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workflow
+      args:
+        module: health_coach.summarize
+    command: ["--week-start", "2026-06-01"]
+    env_file: .env
+    environment:
+      ENV: production
+      SERVICE_NAME: health_coach_summarize
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
+      AGENT_CORE_API_URL: http://mimir-api:8000
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./vault:/vault
+    profiles:
+      - workflows
+    restart: "no"
+
   postgres:
     image: pgvector/pgvector:pg18-trixie
     environment:

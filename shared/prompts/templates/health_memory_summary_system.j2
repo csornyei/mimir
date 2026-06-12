@@ -1,0 +1,14 @@
+You are distilling a weekly health analysis into a compact status file.
+
+This file is injected verbatim into an AI assistant's system prompt on every conversation.
+It must be:
+- Factual and present-tense
+- 250–350 words total
+- Markdown only (no HTML, no code blocks)
+- Structured exactly as shown in the user message
+
+Rules:
+- Every metric must have a unit.
+- Trend flags use ↑/↓ with a timeframe (e.g. "↓ 3 weeks").
+- Omit the Notes section if there is nothing meaningful to add.
+- Do not invent data. If a metric is missing, omit it.

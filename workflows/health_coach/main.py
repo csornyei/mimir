@@ -19,7 +19,7 @@ setup_tracing(service_name=config.service_name)
 
 _tracer = trace.get_tracer("mimir.workflows.health_coach")
 
-COACH_TYPES = {"weekly": {"prompt": "health_coach_weekly.j2", "summary_type": "weekly"}}
+COACH_TYPES = {"week": {"prompt": "health_coach_weekly.j2", "summary_type": "week"}}
 
 
 def validate_config() -> bool:
@@ -44,7 +44,7 @@ async def fetch_fitness_data(endpoint_url: str, summary_type: str) -> str:
     ) as span:
         base_url = f"{endpoint_url}/api/v1/health/summary"
 
-        today = datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
+        today = datetime.now(ZoneInfo(config.timezone or "UTC")).date().isoformat()
 
         span.set_attribute("endpoint_url", base_url)
         span.set_attribute("end_date", today)
@@ -75,12 +75,12 @@ def _build_messages(template: str, data: str) -> list[dict[str, str]]:
 
 
 async def send_notification() -> None:
-    if not config.ntfy_url or not config.ntfy_messages_topic:
+    if not config.ntfy_url:
         return
     click = f"{config.mimir_host}/" if config.mimir_host else None
     await send_ntfy(
         url=config.ntfy_url,
-        topic=config.ntfy_messages_topic,
+        topic=config.ntfy_health_topic,
         message="Mimir: your health coach update is ready",
         title="Mimir - Health Coach",
         click_url=click,
@@ -98,7 +98,7 @@ async def run_health_coach() -> None:
 
     coaching_type = None
     if not config.health_coach_type or config.health_coach_type not in COACH_TYPES:
-        coaching_type = COACH_TYPES["weekly"]
+        coaching_type = COACH_TYPES["week"]
     else:
         coaching_type = COACH_TYPES[config.health_coach_type]
 

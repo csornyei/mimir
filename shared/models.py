@@ -1,9 +1,10 @@
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Date,
     Enum,
     DateTime,
     Float,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
@@ -193,3 +195,40 @@ class RssDigestEntry(Base):
     relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     __table_args__ = (Index("ix_rss_digest_entries_message_ts", "slack_message_ts"),)
+
+
+class HealthSnapshot(Base):
+    __tablename__ = "health_snapshots"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    week_end: Mapped[date] = mapped_column(Date, nullable=False)
+    raw_data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("week_start", name="health_snapshots_week_start_key"),
+        Index("ix_health_snapshots_week_start", "week_start"),
+    )
+
+
+class HealthAnalysis(Base):
+    __tablename__ = "health_analyses"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    analysis_md: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("week_start", name="health_analyses_week_start_key"),
+        Index("ix_health_analyses_week_start", "week_start"),
+    )

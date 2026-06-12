@@ -20,8 +20,8 @@ class WorkflowConfig(SharedConfig):
 
     # Health coach
     health_coach_endpoint_url: Optional[str] = None
-    health_coach_type: Optional[str] = "weekly_coaching"
-    health_coach_prompt_template: str = "health_coach_default.j2"
+    health_coach_type: str = "week"
+    health_memory_file_path: str = "vault/mem_health.md"
 
 
 workflow_config = WorkflowConfig()

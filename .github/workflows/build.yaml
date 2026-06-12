@@ -124,6 +124,12 @@ jobs:
           - name: health-coach
             dockerfile: docker/Dockerfile.workflow
             build_args: module=health_coach.main
+          - name: health-coach-analyze
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=health_coach.analyze
+          - name: health-coach-summarize
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=health_coach.summarize
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
