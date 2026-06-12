@@ -22,14 +22,15 @@ def test_token_estimate_four_chars_is_one_token():
     assert token_estimate("abcd") == 1
 
 
-def test_token_estimate_rounds_down():
-    # 10 chars → 10 // 4 = 2
-    assert token_estimate("0123456789") == 2
+def test_token_estimate_matches_tiktoken():
+    from shared.tokens import count_tokens
+
+    assert token_estimate("0123456789") == count_tokens("0123456789")
 
 
 def test_token_estimate_long_text():
     text = "a" * 400
-    assert token_estimate(text) == 100
+    assert token_estimate(text) == 50
 
 
 # ---------------------------------------------------------------------------

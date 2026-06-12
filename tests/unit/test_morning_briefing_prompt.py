@@ -1,5 +1,4 @@
-from jobs.morning_briefing.prompt import build_morning_prompt
-
+from workflows.morning_briefing.prompt import build_morning_prompt
 
 SAMPLE_EVENTS = [
     {

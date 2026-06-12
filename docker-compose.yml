@@ -76,6 +76,119 @@ services:
       - ./scratch/memory.md:/vault/memory.md
     restart: unless-stopped
 
+  # ── Argo workflow pods ────────────────────────────────────────────────────
+  # One-shot jobs (restart: "no"), built from the shared Dockerfile.workflow via
+  # the `module` build arg. Run on demand, e.g.:
+  #   docker compose --profile workflows run --rm morning-briefing
+  # In production these run as Argo CronWorkflows; here they are individually
+  # buildable/runnable images. The RSS pods chain via --input/--output files and
+  # are wired together by Argo, not compose.
+  morning-briefing:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workflow
+      args:
+        module: morning_briefing.main
+    env_file: .env
+    environment:
+      ENV: production
+      SERVICE_NAME: morning_briefing
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
+      AGENT_CORE_API_URL: http://mimir-api:8000
+      SEMANTIC_MEMORY_PATH: /vault/memory.md
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+    volumes:
+      - ./scratch/memory.md:/vault/memory.md
+    profiles:
+      - workflows
+    restart: "no"
+
+  rss-fetcher:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workflow
+      args:
+        module: rss_digest.fetcher
+    command:
+      [
+        "--start",
+        "0",
+        "--end",
+        "6",
+        "--label",
+        "00-06",
+        "--output",
+        "/tmp/articles.json",
+      ]
+    env_file: .env
+    environment:
+      ENV: production
+      SERVICE_NAME: rss_digest_fetcher
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+    volumes:
+      - ./scratch/rss_workflow:/tmp
+    profiles:
+      - workflows
+    restart: "no"
+
+  rss-summarizer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workflow
+      args:
+        module: rss_digest.summarizer
+    command:
+      ["--input", "/tmp/articles.json", "--output", "/tmp/summaries.json"]
+    env_file: .env
+    environment:
+      ENV: production
+      SERVICE_NAME: rss_digest_summarizer
+      AGENT_CORE_API_URL: http://mimir-api:8000
+      SEMANTIC_MEMORY_PATH: /vault/memory.md
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+    volumes:
+      - ./scratch/memory.md:/vault/memory.md
+      - ./scratch/rss_workflow:/tmp
+    profiles:
+      - workflows
+    restart: "no"
+
+  rss-collector:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workflow
+      args:
+        module: rss_digest.collector
+    command: ["--input", "/tmp/summaries.json", "--label", "00-06"]
+    env_file: .env
+    volumes:
+      - ./scratch/rss_workflow:/tmp
+    environment:
+      ENV: production
+      SERVICE_NAME: rss_digest_collector
+      DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+    profiles:
+      - workflows
+    restart: "no"
+
+  health-coach:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workflow
+      args:
+        module: health_coach.main
+    env_file: .env
+    environment:
+      ENV: production
+      SERVICE_NAME: health_coach
+      AGENT_CORE_API_URL: https://mimir.tail30e7da.ts.net
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      HEALTH_COACH_ENDPOINT_URL: https://health.tail30e7da.ts.net
+    profiles:
+      - workflows
+    restart: "no"
+
   postgres:
     image: pgvector/pgvector:pg18-trixie
     environment:

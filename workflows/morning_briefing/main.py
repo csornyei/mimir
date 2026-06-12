@@ -9,8 +9,8 @@ import yaml
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind, StatusCode
 
-from jobs.config import job_config
-from jobs.morning_briefing.prompt import build_morning_prompt
+from workflows.config import workflow_config as job_config
+from workflows.morning_briefing.prompt import build_morning_prompt
 from shared.external.caldav.client import CalDAVClient
 from shared.external.ntfy import send_ntfy
 from shared.external.weather.weather import get_weather_data

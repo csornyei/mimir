@@ -3,7 +3,7 @@ from typing import Optional
 from shared.config import SharedConfig
 
 
-class JobConfig(SharedConfig):
+class WorkflowConfig(SharedConfig):
     timezone: Optional[str] = "Europe/Amsterdam"
     llm_model: Optional[str] = "gemma4:26b"
     agent_core_api_url: Optional[str] = None
@@ -15,6 +15,13 @@ class JobConfig(SharedConfig):
     miniflux_password: Optional[str] = None
     rss_digest_min_entries: int = 10
     rss_digest_picks: int = 10
+    rss_article_max_tokens: int = 4000
+    rss_digest_score_threshold: float = 7.0
+
+    # Health coach
+    health_coach_endpoint_url: Optional[str] = None
+    health_coach_type: Optional[str] = "weekly_coaching"
+    health_coach_prompt_template: str = "health_coach_default.j2"
 
 
-job_config = JobConfig()
+workflow_config = WorkflowConfig()

@@ -90,11 +90,13 @@ class RSSClient:
         return all_entries
 
     def _parse_entry(self, entry: dict[str, Any]) -> dict[str, Any]:
-        content = entry.get("content", "")
-        if content:
-            text = _strip_escape_chars(_strip_html(content))
+        raw_content = entry.get("content", "")
+        if raw_content:
+            text = _strip_escape_chars(_strip_html(raw_content))
+            full_content: str | None = text or None
             summary: str | None = text[:_SUMMARY_MAX] if text else None
         else:
+            full_content = None
             summary = None
         feed = entry.get("feed", {})
         category = feed.get("category", {})
@@ -106,4 +108,5 @@ class RSSClient:
             "feed_name": feed.get("title"),
             "category": category.get("title"),
             "summary": summary,
+            "content": full_content,
         }

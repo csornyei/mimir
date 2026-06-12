@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "disableBypassPermissionsMode": "disable",
+    "allow": [
+      "Bash(uv run alembic *)",
+      "Bash(uv run pytest *)",
+      "Bash(uv run *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git status)",
+      "Bash(git show *)",
+      "Bash(cat *)",
+      "Bash(grep *)"
+    ],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(rm -rf *)",
+      "Bash(kubectl delete *)",
+      "Read(**/.env)",
+      "Read(**/*.env)",
+      "Read(**/secrets/**)",
+      "Bash(git add *)",
+      "Bash(git commit -m *)",
+      "Bash(git push *)",
+      "Bash(git pull *)"
+    ]
+  }
+}

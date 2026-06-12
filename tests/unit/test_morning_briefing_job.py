@@ -2,9 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from jobs.morning_briefing.main import run_morning_briefing
+from workflows.morning_briefing.main import run_morning_briefing
 from shared.schemas import LLMSettings
-
 
 SAMPLE_EVENTS = [
     {
@@ -66,9 +65,10 @@ def _mock_http_client() -> tuple[MagicMock, AsyncMock]:
 async def test_run_morning_briefing_skips_when_caldav_url_missing() -> None:
     with (
         patch(
-            "jobs.morning_briefing.main.job_config", _make_job_config(caldav_url=None)
+            "workflows.morning_briefing.main.job_config",
+            _make_job_config(caldav_url=None),
         ),
-        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav,
+        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
@@ -78,10 +78,10 @@ async def test_run_morning_briefing_skips_when_caldav_url_missing() -> None:
 async def test_run_morning_briefing_skips_when_caldav_username_missing() -> None:
     with (
         patch(
-            "jobs.morning_briefing.main.job_config",
+            "workflows.morning_briefing.main.job_config",
             _make_job_config(caldav_username=None),
         ),
-        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav,
+        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
@@ -91,10 +91,10 @@ async def test_run_morning_briefing_skips_when_caldav_username_missing() -> None
 async def test_run_morning_briefing_skips_when_caldav_password_missing() -> None:
     with (
         patch(
-            "jobs.morning_briefing.main.job_config",
+            "workflows.morning_briefing.main.job_config",
             _make_job_config(caldav_password=None),
         ),
-        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav,
+        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
@@ -104,10 +104,10 @@ async def test_run_morning_briefing_skips_when_caldav_password_missing() -> None
 async def test_run_morning_briefing_skips_when_agent_core_url_missing() -> None:
     with (
         patch(
-            "jobs.morning_briefing.main.job_config",
+            "workflows.morning_briefing.main.job_config",
             _make_job_config(agent_core_api_url=None),
         ),
-        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav,
+        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav,
     ):
         await run_morning_briefing()
         mock_dav.assert_not_called()
@@ -118,13 +118,13 @@ async def test_run_morning_briefing_calls_agent_core_api() -> None:
     mock_cls, mock_instance = _mock_http_client()
 
     with (
-        patch("jobs.morning_briefing.main.job_config", _make_job_config()),
-        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav_class,
+        patch("workflows.morning_briefing.main.job_config", _make_job_config()),
+        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav_class,
         patch(
-            "jobs.morning_briefing.main.prepare_llm_settings",
+            "workflows.morning_briefing.main.prepare_llm_settings",
             return_value=LLMSettings(),
         ),
-        patch("jobs.morning_briefing.main.send_ntfy", new=AsyncMock()),
+        patch("workflows.morning_briefing.main.send_ntfy", new=AsyncMock()),
         patch("httpx.AsyncClient", mock_cls),
     ):
         mock_dav_instance = AsyncMock()
@@ -142,13 +142,13 @@ async def test_run_morning_briefing_creates_caldav_client_with_config_creds() ->
     mock_cls, _ = _mock_http_client()
 
     with (
-        patch("jobs.morning_briefing.main.job_config", _make_job_config()),
-        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav_class,
+        patch("workflows.morning_briefing.main.job_config", _make_job_config()),
+        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav_class,
         patch(
-            "jobs.morning_briefing.main.prepare_llm_settings",
+            "workflows.morning_briefing.main.prepare_llm_settings",
             return_value=LLMSettings(),
         ),
-        patch("jobs.morning_briefing.main.send_ntfy", new=AsyncMock()),
+        patch("workflows.morning_briefing.main.send_ntfy", new=AsyncMock()),
         patch("httpx.AsyncClient", mock_cls),
     ):
         mock_dav_instance = AsyncMock()
@@ -170,13 +170,13 @@ async def test_run_morning_briefing_does_not_raise_on_caldav_error() -> None:
     mock_cls, _ = _mock_http_client()
 
     with (
-        patch("jobs.morning_briefing.main.job_config", _make_job_config()),
-        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav_class,
+        patch("workflows.morning_briefing.main.job_config", _make_job_config()),
+        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav_class,
         patch(
-            "jobs.morning_briefing.main.prepare_llm_settings",
+            "workflows.morning_briefing.main.prepare_llm_settings",
             return_value=LLMSettings(),
         ),
-        patch("jobs.morning_briefing.main.send_ntfy", new=AsyncMock()),
+        patch("workflows.morning_briefing.main.send_ntfy", new=AsyncMock()),
         patch("httpx.AsyncClient", mock_cls),
     ):
         mock_dav_instance = AsyncMock()
@@ -198,10 +198,10 @@ async def test_run_morning_briefing_does_not_raise_on_http_error() -> None:
     mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
     with (
-        patch("jobs.morning_briefing.main.job_config", _make_job_config()),
-        patch("jobs.morning_briefing.main.CalDAVClient") as mock_dav_class,
+        patch("workflows.morning_briefing.main.job_config", _make_job_config()),
+        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav_class,
         patch(
-            "jobs.morning_briefing.main.prepare_llm_settings",
+            "workflows.morning_briefing.main.prepare_llm_settings",
             return_value=LLMSettings(),
         ),
         patch("httpx.AsyncClient", mock_cls),
