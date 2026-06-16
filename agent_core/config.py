@@ -5,11 +5,11 @@ class AgentConfig(SharedConfig):
     owner_name: str = "Máté"
     llm_base_url: str = "http://localhost:8080"
     api_key: str | None = None
-    llm_model: str = "google/gemma-4-E2B-it"
+    llm_model: str = "gemma4"
     llm_max_tokens: int = 2048
     llm_temperature: float = 0.7
 
-    embedding_url: str = "http://localhost:8081/v1/embeddings"
+    embedding_base_url: str = "http://localhost:8081"
     embedding_model: str = "nomic-ai/nomic-embed-text-v2-moe"
 
     llm_context_window: int = 8192

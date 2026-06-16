@@ -14,9 +14,12 @@ from agent_core.routes.chat import router as chat_router
 from agent_core.routes.conversations import router as conversations_router
 from agent_core.routes.ingest import router as ingest_router
 from agent_core.scheduler.jobs import create_scheduler
+from openinference.instrumentation.openai import OpenAIInstrumentor
+
 from shared.telemetry import setup_tracing
 
 setup_tracing(service_name=agent_config.service_name)
+OpenAIInstrumentor().instrument()
 
 
 @asynccontextmanager
