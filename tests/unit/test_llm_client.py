@@ -1,46 +1,44 @@
 from unittest.mock import AsyncMock, MagicMock
 
+import openai
 import pytest
-from httpx import HTTPStatusError, Request, Response
 
 from agent_core.llm.client import LLMClient
 from agent_core.llm.params import LLMParams
 
 
-def _413_error() -> HTTPStatusError:
-    req = Request("POST", "http://test/v1/chat/completions")
-    resp = Response(413, request=req)
-    return HTTPStatusError("413 Payload Too Large", request=req, response=resp)
+def _make_choice(
+    content: str, tool_calls=None, finish_reason: str = "stop"
+) -> MagicMock:
+    choice = MagicMock()
+    choice.finish_reason = finish_reason
+    choice.message.content = content
+    choice.message.model_extra = {}
+    choice.message.tool_calls = tool_calls
+    return choice
 
 
-def _http_error(status: int) -> HTTPStatusError:
-    req = Request("POST", "http://test/v1/chat/completions")
-    resp = Response(status, request=req)
-    return HTTPStatusError(f"{status} Error", request=req, response=resp)
-
-
-def _413_response() -> MagicMock:
+def _ok_completion(content: str) -> MagicMock:
     resp = MagicMock()
-    resp.status_code = 413
-    resp.text = "Request too large"
-    resp.raise_for_status.side_effect = _413_error()
+    resp.choices = [_make_choice(content)]
+    resp.usage.prompt_tokens = 10
+    resp.usage.completion_tokens = 5
+    resp.usage.total_tokens = 15
     return resp
 
 
-def _make_client(mock_http: AsyncMock) -> LLMClient:
-    """Create a LLMClient instance with its internal httpx client replaced."""
+def _413_error() -> openai.APIStatusError:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 413
+    mock_resp.headers = {}
+    return openai.APIStatusError("413 Payload Too Large", response=mock_resp, body=None)
+
+
+def _make_client(mock_create: AsyncMock) -> LLMClient:
     client = LLMClient()
-    client._client = mock_http
+    client._client = MagicMock()
+    client._client.chat.completions.create = mock_create
     return client
-
-
-def _ok_response(content: str) -> MagicMock:
-    resp = MagicMock()
-    resp.raise_for_status = MagicMock()
-    resp.status_code = 200
-    resp.text = f'{{"choices": [{{"message": {{"content": "{content}"}}}}]}}'
-    resp.json.return_value = {"choices": [{"message": {"content": content}}]}
-    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -48,10 +46,9 @@ def _ok_response(content: str) -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-async def test_complete_returns_content(mocker):
-    http = AsyncMock()
-    http.post.return_value = _ok_response("Hello there!")
-    client = _make_client(http)
+async def test_complete_returns_content():
+    create = AsyncMock(return_value=_ok_completion("Hello there!"))
+    client = _make_client(create)
 
     result = await client.complete([{"role": "user", "content": "Hi"}])
 
@@ -60,94 +57,91 @@ async def test_complete_returns_content(mocker):
     assert result["tool_calls"] == []
 
 
-async def test_complete_posts_to_correct_endpoint(mocker):
-    http = AsyncMock()
-    http.post.return_value = _ok_response("ok")
-    client = _make_client(http)
+async def test_complete_posts_to_correct_endpoint():
+    create = AsyncMock(return_value=_ok_completion("ok"))
+    client = _make_client(create)
 
     await client.complete([{"role": "user", "content": "Hi"}])
 
-    http.post.assert_called_once()
-    endpoint = http.post.call_args[0][0]
-    assert endpoint == "/v1/chat/completions"
+    create.assert_called_once()
 
 
-async def test_complete_payload_contains_required_fields(mocker):
-    http = AsyncMock()
-    http.post.return_value = _ok_response("ok")
-    client = _make_client(http)
+async def test_complete_payload_contains_required_fields():
+    create = AsyncMock(return_value=_ok_completion("ok"))
+    client = _make_client(create)
 
     await client.complete([{"role": "user", "content": "Hi"}])
 
-    payload = http.post.call_args[1]["json"]
-    assert "model" in payload
-    assert "messages" in payload
-    assert "max_tokens" in payload
-    assert "temperature" in payload
+    kwargs = create.call_args[1]
+    assert "model" in kwargs
+    assert "messages" in kwargs
+    assert "max_tokens" in kwargs
+    assert "temperature" in kwargs
 
 
-async def test_complete_no_tools_field_by_default(mocker):
-    http = AsyncMock()
-    http.post.return_value = _ok_response("ok")
-    client = _make_client(http)
+async def test_complete_no_tools_field_by_default():
+    create = AsyncMock(return_value=_ok_completion("ok"))
+    client = _make_client(create)
 
     await client.complete([{"role": "user", "content": "Hi"}])
 
-    payload = http.post.call_args[1]["json"]
-    assert "tools" not in payload
-    assert "tool_choice" not in payload
+    kwargs = create.call_args[1]
+    # tools and tool_choice should be NOT_GIVEN (falsy), not real values
+    from openai import NOT_GIVEN
+
+    assert kwargs.get("tools") is NOT_GIVEN
+    assert kwargs.get("tool_choice") is NOT_GIVEN
 
 
-async def test_complete_adds_tools_when_provided(mocker):
-    http = AsyncMock()
-    http.post.return_value = _ok_response("ok")
-    client = _make_client(http)
+async def test_complete_adds_tools_when_provided():
+    create = AsyncMock(return_value=_ok_completion("ok"))
+    client = _make_client(create)
 
     tools = [{"type": "function", "function": {"name": "my_tool"}}]
     await client.complete([{"role": "user", "content": "Hi"}], tools=tools)
 
-    payload = http.post.call_args[1]["json"]
-    assert payload["tools"] == tools
-    assert payload["tool_choice"] == "auto"
+    kwargs = create.call_args[1]
+    assert kwargs["tools"] == tools
+    assert kwargs["tool_choice"] == "auto"
 
 
-async def test_complete_propagates_http_error(mocker):
-    http = AsyncMock()
-    resp = MagicMock()
-    resp.status_code = 500
-    resp.text = "Internal Server Error"
-    resp.raise_for_status.side_effect = Exception("500 Server Error")
-    http.post.return_value = resp
-    client = _make_client(http)
+async def test_complete_propagates_http_error():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.headers = {}
+    create = AsyncMock(
+        side_effect=openai.APIStatusError(
+            "500 Server Error", response=mock_resp, body=None
+        )
+    )
+    client = _make_client(create)
 
-    with pytest.raises(Exception, match="500"):
+    with pytest.raises(openai.APIStatusError, match="500"):
         await client.complete([{"role": "user", "content": "Hi"}])
 
 
-async def test_complete_custom_temperature(mocker):
-    http = AsyncMock()
-    http.post.return_value = _ok_response("ok")
-    client = _make_client(http)
+async def test_complete_custom_temperature():
+    create = AsyncMock(return_value=_ok_completion("ok"))
+    client = _make_client(create)
 
     await client.complete(
         [{"role": "user", "content": "Hi"}], params=LLMParams(temperature=0.1)
     )
 
-    payload = http.post.call_args[1]["json"]
-    assert payload["temperature"] == 0.1
+    kwargs = create.call_args[1]
+    assert kwargs["temperature"] == 0.1
 
 
-async def test_complete_custom_max_tokens(mocker):
-    http = AsyncMock()
-    http.post.return_value = _ok_response("ok")
-    client = _make_client(http)
+async def test_complete_custom_max_tokens():
+    create = AsyncMock(return_value=_ok_completion("ok"))
+    client = _make_client(create)
 
     await client.complete(
         [{"role": "user", "content": "Hi"}], params=LLMParams(max_tokens=512)
     )
 
-    payload = http.post.call_args[1]["json"]
-    assert payload["max_tokens"] == 512
+    kwargs = create.call_args[1]
+    assert kwargs["max_tokens"] == 512
 
 
 # ---------------------------------------------------------------------------
@@ -155,11 +149,9 @@ async def test_complete_custom_max_tokens(mocker):
 # ---------------------------------------------------------------------------
 
 
-async def test_complete_uses_fallback_on_413(mocker):
-    http = AsyncMock()
-    # First attempt → 413, second attempt (fallback) → 200
-    http.post.side_effect = [_413_response(), _ok_response("fallback response")]
-    client = _make_client(http)
+async def test_complete_uses_fallback_on_413():
+    create = AsyncMock(side_effect=[_413_error(), _ok_completion("fallback response")])
+    client = _make_client(create)
 
     fallback_msgs = [{"role": "user", "content": "shorter"}]
     result = await client.complete(
@@ -169,18 +161,14 @@ async def test_complete_uses_fallback_on_413(mocker):
 
     assert result["content"] == "fallback response"
     assert result["finish_reason"] == "stop"
-    assert http.post.call_count == 2
+    assert create.call_count == 2
 
 
-async def test_complete_uses_second_fallback_when_first_also_413(mocker):
-    http = AsyncMock()
-    # First two attempts → 413, third → 200
-    http.post.side_effect = [
-        _413_response(),
-        _413_response(),
-        _ok_response("minimal response"),
-    ]
-    client = _make_client(http)
+async def test_complete_uses_second_fallback_when_first_also_413():
+    create = AsyncMock(
+        side_effect=[_413_error(), _413_error(), _ok_completion("minimal response")]
+    )
+    client = _make_client(create)
 
     result = await client.complete(
         [{"role": "user", "content": "original"}],
@@ -192,65 +180,60 @@ async def test_complete_uses_second_fallback_when_first_also_413(mocker):
 
     assert result["content"] == "minimal response"
     assert result["finish_reason"] == "stop"
-    assert http.post.call_count == 3
+    assert create.call_count == 3
 
 
-async def test_complete_re_raises_when_all_fallbacks_exhausted(mocker):
-    http = AsyncMock()
-    http.post.side_effect = [_413_response(), _413_response()]
-    client = _make_client(http)
+async def test_complete_re_raises_when_all_fallbacks_exhausted():
+    create = AsyncMock(side_effect=[_413_error(), _413_error()])
+    client = _make_client(create)
 
-    with pytest.raises(HTTPStatusError) as exc_info:
+    with pytest.raises(openai.APIStatusError) as exc_info:
         await client.complete(
             [{"role": "user", "content": "original"}],
             fallbacks=[[{"role": "user", "content": "fallback"}]],
         )
 
-    assert exc_info.value.response.status_code == 413
+    assert exc_info.value.status_code == 413
 
 
-async def test_complete_413_no_fallbacks_re_raises(mocker):
-    http = AsyncMock()
-    http.post.return_value = _413_response()
-    client = _make_client(http)
+async def test_complete_413_no_fallbacks_re_raises():
+    create = AsyncMock(side_effect=_413_error())
+    client = _make_client(create)
 
-    with pytest.raises(HTTPStatusError) as exc_info:
+    with pytest.raises(openai.APIStatusError) as exc_info:
         await client.complete([{"role": "user", "content": "Hi"}])
 
-    assert exc_info.value.response.status_code == 413
-    assert http.post.call_count == 1
+    assert exc_info.value.status_code == 413
+    assert create.call_count == 1
 
 
-async def test_complete_non_413_http_error_not_retried(mocker):
-    http = AsyncMock()
-    resp = MagicMock()
-    resp.status_code = 500
-    resp.text = "Internal Server Error"
-    resp.raise_for_status.side_effect = _http_error(500)
-    http.post.return_value = resp
-    client = _make_client(http)
+async def test_complete_non_413_http_error_not_retried():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.headers = {}
+    create = AsyncMock(
+        side_effect=openai.APIStatusError("500 Error", response=mock_resp, body=None)
+    )
+    client = _make_client(create)
 
     fallback_msgs = [{"role": "user", "content": "fallback"}]
-    with pytest.raises(HTTPStatusError) as exc_info:
+    with pytest.raises(openai.APIStatusError) as exc_info:
         await client.complete(
             [{"role": "user", "content": "Hi"}],
             fallbacks=[fallback_msgs],
         )
 
-    # Must not have tried the fallback
-    assert http.post.call_count == 1
-    assert exc_info.value.response.status_code == 500
+    assert create.call_count == 1
+    assert exc_info.value.status_code == 500
 
 
-async def test_complete_fallback_uses_correct_messages(mocker):
-    http = AsyncMock()
-    http.post.side_effect = [_413_response(), _ok_response("ok")]
-    client = _make_client(http)
+async def test_complete_fallback_uses_correct_messages():
+    create = AsyncMock(side_effect=[_413_error(), _ok_completion("ok")])
+    client = _make_client(create)
 
     original = [{"role": "user", "content": "original"}]
     fallback = [{"role": "user", "content": "fallback content"}]
     await client.complete(original, fallbacks=[fallback])
 
-    # Second call should use the fallback messages
-    second_call_payload = http.post.call_args_list[1][1]["json"]
-    assert second_call_payload["messages"] == fallback
+    second_call_kwargs = create.call_args_list[1][1]
+    assert second_call_kwargs["messages"] == fallback
