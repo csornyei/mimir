@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from agent_core.config import agent_config
@@ -20,9 +20,12 @@ from agent_core.routes.memory import router as memory_router
 from agent_core.routes.models import router as models_router
 from agent_core.scheduler.jobs import create_scheduler
 from agent_core.ws.router import ws_endpoint
+from openinference.instrumentation.openai import OpenAIInstrumentor
+
 from shared.telemetry import setup_tracing
 
 setup_tracing(service_name=agent_config.service_name)
+OpenAIInstrumentor().instrument()
 
 _DIST_DIR = Path(__file__).parent.parent / "agent_ui" / "dist"
 
@@ -63,12 +66,11 @@ async def health() -> dict:
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
-async def spa_fallback(full_path: str) -> FileResponse:
-    """Serve the SPA for all non-API routes; fall back to index.html for unknown paths."""
+async def spa_fallback(full_path: str) -> Response:
     dist = _DIST_DIR.resolve()
     try:
         candidate = (dist / full_path).resolve()
-        candidate.relative_to(dist)  # raises ValueError if path escapes dist
+        candidate.relative_to(dist)
     except ValueError:
         return FileResponse(dist / "index.html")
     if candidate.exists() and candidate.is_file():

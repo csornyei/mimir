@@ -1,6 +1,6 @@
 from typing import Literal
 
-from httpx import AsyncClient
+from openai import AsyncOpenAI
 
 from agent_core.config import agent_config
 from shared.logger import logger
@@ -9,39 +9,26 @@ from shared.logger import logger
 class EmbeddingModel:
     def __init__(self, model_name: str = agent_config.embedding_model):
         self._model_name = model_name
-        headers = {
-            "Content-Type": "application/json",
-        }
-
-        self._client = AsyncClient(
-            base_url=agent_config.embedding_url, headers=headers, timeout=60.0
+        self._client = AsyncOpenAI(
+            base_url=agent_config.embedding_base_url,
+            api_key=agent_config.api_key,
+            timeout=60.0,
         )
 
     async def embed(
         self, query: list[str], prefix: Literal["search_document", "search_query"]
     ) -> list[list[float]]:
         try:
-            response = await self._client.post(
-                "/api/embed",
-                json={
-                    "model": self._model_name,
-                    "input": [f"{prefix}: {q}" for q in query],
-                },
+            result = await self._client.embeddings.create(
+                model=self._model_name,
+                input=[f"{prefix}: {q}" for q in query],
             )
-
-            response.raise_for_status()
-
-            body = response.json()
-
-            embeddings = body["embeddings"]
-
-            return embeddings
+            return [item.embedding for item in result.data]
         except Exception as e:
             logger.error(
                 "embedding_failed",
                 error=str(e),
                 error_type=type(e).__name__,
-                status_code=getattr(getattr(e, "response", None), "status_code", None),
                 exc_info=True,
             )
             raise
@@ -64,22 +51,18 @@ class EmbeddingModel:
                 "embedding_query_failed",
                 error=str(e),
                 error_type=type(e).__name__,
-                status_code=getattr(getattr(e, "response", None), "status_code", None),
                 exc_info=True,
             )
             raise
 
     async def embed_document(self, documents: list[str]) -> list[list[float]]:
         try:
-            embeddings = await self.embed(documents, "search_document")
-
-            return embeddings
+            return await self.embed(documents, "search_document")
         except Exception as e:
             logger.error(
                 "embedding_document_failed",
                 error=str(e),
                 error_type=type(e).__name__,
-                status_code=getattr(getattr(e, "response", None), "status_code", None),
                 document_count=len(documents),
                 exc_info=True,
             )
@@ -103,7 +86,6 @@ class EmbeddingModel:
                 "embedding_single_document_failed",
                 error=str(e),
                 error_type=type(e).__name__,
-                status_code=getattr(getattr(e, "response", None), "status_code", None),
                 document="***".join([document[:5], document[-5:]]),
                 exc_info=True,
             )

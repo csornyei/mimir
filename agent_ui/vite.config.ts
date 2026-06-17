@@ -14,6 +14,13 @@ export default defineConfig({
             registerType: "autoUpdate",
             workbox: {
                 globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
+                navigateFallback: "index.html",
+                navigateFallbackDenylist: [
+                    /^\/docs/,
+                    /^\/redoc/,
+                    /^\/openapi\.json/,
+                    /^\/api\//,
+                ],
                 runtimeCaching: [
                     {
                         urlPattern: /^\/api\//,
