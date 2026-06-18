@@ -44,23 +44,7 @@ async def request_approval(
         span.set_attribute("approval.tool_name", tool_name)
         span.set_attribute("approval.triggered_by", triggered_by)
 
-        text = _format_approval_message(payload)
-
-        # Slack notification is best-effort — failures don't block the PWA approval flow
-        try:
-            slack_response = await _slack.chat_postMessage(
-                channel=agent_config.slack_dm_channel_id,
-                text=text,
-            )
-            message_ts: str = slack_response["ts"]
-        except Exception as slack_err:
-            logger.warning(
-                "approval_slack_notification_failed",
-                error=str(slack_err),
-                error_type=type(slack_err).__name__,
-                tool_name=tool_name,
-            )
-            message_ts = f"web_{uuid4()}"
+        message_ts = f"web_{uuid4()}"
 
         timeout_at = (
             datetime.now(UTC) + timedelta(minutes=agent_config.approval_timeout_minutes)
@@ -142,19 +126,7 @@ async def _handle_approve(
             },
         )
         if not sent:
-            try:
-                await _slack.chat_postMessage(
-                    channel=action.channel_id,
-                    thread_ts=action.message_ts,
-                    text=f"✅ Done. {result}",
-                )
-            except Exception as slack_err:
-                logger.warning(
-                    "approval_slack_result_post_failed",
-                    action_id=str(action.id),
-                    error=str(slack_err),
-                    error_type=type(slack_err).__name__,
-                )
+            logger.error("arrove_not_sent", action_id=str(action.id))
     except Exception as e:
         await store.set_status(
             session, action.id, ActionStatus.rejected, resolved_at=datetime.now(UTC)
@@ -169,19 +141,7 @@ async def _handle_approve(
             },
         )
         if not sent:
-            try:
-                await _slack.chat_postMessage(
-                    channel=action.channel_id,
-                    thread_ts=action.message_ts,
-                    text=f"⚠️ Execution failed: {e!s}",
-                )
-            except Exception as slack_err:
-                logger.warning(
-                    "approval_slack_failure_post_failed",
-                    action_id=str(action.id),
-                    error=str(slack_err),
-                    error_type=type(slack_err).__name__,
-                )
+            logger.warning("approval_not_sent", action_id=str(action.id))
         logger.error(
             "approval_execution_error",
             action_id=str(action.id),
@@ -212,19 +172,7 @@ async def _handle_approve(
                 },
             )
             if not sent:
-                try:
-                    await _slack.chat_postMessage(
-                        channel=action.channel_id,
-                        thread_ts=action.message_ts,
-                        text=llm_reply,
-                    )
-                except Exception as slack_err:
-                    logger.warning(
-                        "approval_slack_reinvoke_post_failed",
-                        action_id=str(action.id),
-                        error=str(slack_err),
-                        error_type=type(slack_err).__name__,
-                    )
+                logger.warning("approval_not_sent", action_id=str(action.id))
         except Exception as e:
             logger.error(
                 "approval_reinvoke_failed",
@@ -252,20 +200,7 @@ async def _handle_reject(session: AsyncSession, action: PendingActionModel) -> N
         {"type": "approval_result", "action_id": str(action.id), "status": "rejected"},
     )
     if not sent:
-        description = action.payload.get("description", "the action")
-        try:
-            await _slack.chat_postMessage(
-                channel=action.channel_id,
-                thread_ts=action.message_ts,
-                text=f"❌ Cancelled. {description}",
-            )
-        except Exception as slack_err:
-            logger.warning(
-                "approval_slack_reject_post_failed",
-                action_id=str(action.id),
-                error=str(slack_err),
-                error_type=type(slack_err).__name__,
-            )
+        logger.warning("approval_not_sent", action_id=str(action.id))
     logger.info("approval_rejected", action_id=str(action.id))
 
 
@@ -349,20 +284,6 @@ async def process_timeouts(session: AsyncSession) -> None:
             },
         )
         if not sent:
-            try:
-                await _slack.chat_postMessage(
-                    channel=action.channel_id,
-                    thread_ts=action.message_ts,
-                    text="⏰ Approval request timed out and was automatically cancelled.",
-                )
-            except Exception as e:
-                logger.error(
-                    "approval_timeout_notify_failed",
-                    action_id=str(action.id),
-                    tool_name=action.payload.get("tool_name", "unknown"),
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    exc_info=True,
-                )
+            logger.warning("approval_not_sent", action_id=str(action.id))
     if actions:
         logger.debug("approval_timeouts_processed", count=len(actions))
