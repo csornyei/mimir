@@ -1,6 +1,6 @@
 [project]
 name = "mimir"
-version = "2.3.0"
+version = "3.0.0"
 description = "Self-hosted AI assistant."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -32,7 +32,6 @@ agent = [
     "openai>=2.42.0",
     "openinference-instrumentation-openai>=0.1.52",
     "opentelemetry-instrumentation-fastapi>=0.62b0",
-    "opentelemetry-instrumentation-openai-v2>=2.3b0",
     "pyaml>=26.2.1",
     "pymupdf>=1.27.2.2",
     "slack-bolt>=1.27.0",
