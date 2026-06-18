@@ -8,7 +8,6 @@ class SlackConfig(SharedConfig):
     slack_dm_channel_id: str = ""
     slack_user_id: str = ""
     morning_brief_channel_id: str | None = None
-    morning_brief_hour: int = 7
     newspaper_channel_id: str | None = None
 
     mcp_url: str = "http://localhost:8010"

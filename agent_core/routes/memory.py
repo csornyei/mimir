@@ -10,12 +10,12 @@ _memory = SemanticMemory()
 
 @router.get("", response_model=MemoryResponse)
 async def get_memory() -> MemoryResponse:
-    return MemoryResponse(content=_memory.read())
+    return MemoryResponse(content=await _memory.read())
 
 
 # No auth — self-hosted on a trusted network (LAN/Tailscale). Unsafe if exposed to the internet
 # without a reverse-proxy auth layer.
 @router.put("", response_model=MemoryWriteResponse)
 async def write_memory(body: MemoryWriteRequest) -> MemoryWriteResponse:
-    _memory.write(body.content)
+    await _memory.write(body.content)
     return MemoryWriteResponse()

@@ -5,7 +5,6 @@ import pytest
 
 from shared.external.rss.client import RSSClient
 
-
 START = datetime(2026, 4, 17, 8, 0, tzinfo=timezone.utc)
 END = datetime(2026, 4, 17, 12, 0, tzinfo=timezone.utc)
 
@@ -110,7 +109,7 @@ async def test_get_entries_passes_correct_params():
 
 
 @pytest.mark.asyncio
-async def test_get_entries_summary_truncated_to_500_chars():
+async def test_get_entries_summary_truncated_to_200_chars():
     long_content = "x" * 1000
     entry = _make_entry(content=long_content)
     mock_client = MagicMock()
@@ -122,7 +121,7 @@ async def test_get_entries_summary_truncated_to_500_chars():
     with patch("shared.external.rss.client.miniflux.Client", return_value=mock_client):
         result = await client.get_entries(START, END)
 
-    assert len(result[0]["summary"]) == 500
+    assert len(result[0]["summary"]) == 200
 
 
 @pytest.mark.asyncio

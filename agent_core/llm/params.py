@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from shared.schemas import LLMSettings
 
@@ -15,6 +16,7 @@ class LLMParams:
     repetition_penalty: float | None = None
     enable_thinking: bool | None = None
     thinking_budget: int | None = None
+    response_format: Literal["json"] | None = None
 
 
 def llm_params_from_settings(settings: LLMSettings | None) -> LLMParams:
@@ -30,4 +32,5 @@ def llm_params_from_settings(settings: LLMSettings | None) -> LLMParams:
         repetition_penalty=settings.repetition_penalty,
         enable_thinking=settings.enable_thinking,
         thinking_budget=settings.thinking_budget,
+        response_format=settings.response_format,
     )

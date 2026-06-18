@@ -93,9 +93,9 @@ class LLMClient:
 
         extra: dict = {
             # Always explicit — never rely on server default (empty-content-when-thinking bug)
-            "enable_thinking": params.enable_thinking
-            if params.enable_thinking is not None
-            else False,
+            "enable_thinking": (
+                params.enable_thinking if params.enable_thinking is not None else False
+            ),
         }
         if params.min_p is not None:
             extra["min_p"] = params.min_p

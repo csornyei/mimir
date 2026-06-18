@@ -20,6 +20,7 @@ class SharedConfig(BaseSettings):
     env: str = "development"
     service_name: str = "mimir"
     otel_exporter_otlp_endpoint: str = "http://alloy:4317"
+    llm_presets_path: str = "config/presets.yaml"
     environment: str = "homelab"
 
     weather_config_path: Optional[str] = None
@@ -28,7 +29,10 @@ class SharedConfig(BaseSettings):
     ntfy_digest_topic: Optional[str] = None
     ntfy_morning_brief_topic: Optional[str] = None
     ntfy_messages_topic: Optional[str] = None
+    ntfy_health_topic: str = "mimir-health-coach"
     mimir_host: Optional[str] = None
+
+    file_api_url: Optional[str] = None
 
 
 shared_config = SharedConfig()

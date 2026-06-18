@@ -50,11 +50,9 @@ class AgentConfig(SharedConfig):
     slack_dm_channel_id: str = ""
     slack_user_id: str = ""
     morning_brief_channel_id: str | None = None
-    morning_brief_hour: int = 7
     newspaper_channel_id: str | None = None
 
     llm_scheduler_model: str | None = None
-    llm_presets_path: str = "config/presets.yaml"
 
 
 agent_config = AgentConfig()

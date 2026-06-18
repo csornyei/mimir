@@ -1,0 +1,37 @@
+Produce the `mem_health.md` file for week of {{ week_start }}.
+
+Use this exact structure (fill in real values from the analysis below):
+
+```
+# Health Status
+
+*Last updated: <YYYY-MM-DD> (week of {{ week_start }})*
+
+## Current Snapshot
+- **Weight**: X kg · **Body fat**: X%
+- **VO2 Max**: X (prior: X)
+- **HRV avg**: X ms · **Resting HR avg**: X bpm
+- **Sleep avg**: X h/night · **Efficiency**: X%
+- **Steps avg**: X/day · **Active kcal avg**: X kcal/day
+
+## Sleep Pattern
+[2–3 sentences: duration, deep/REM architecture, schedule consistency]
+
+## Fitness & Activity
+[2–3 sentences: activity volume, structured training, TDEE]
+
+## Trend Flags
+- [directional multi-week trend with ↑/↓ and timeframe]
+- [repeat for each notable trend]
+
+## Notes
+[1–2 sentences of context; omit this section if nothing meaningful]
+```
+
+Output only the file content — no preamble, no code fences, no explanation.
+
+---
+
+## Weekly analysis to distil
+
+{{ analysis_md }}

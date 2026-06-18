@@ -1,0 +1,65 @@
+## Week of {{ week_start }} – {{ week_end }}
+History available: {{ deltas.weeks_of_history }} week(s)
+
+---
+
+### Current week metrics
+| Metric | Value |
+|--------|-------|
+| HRV avg | {{ metrics.hrv_avg }} ms |
+| Resting HR avg | {{ metrics.resting_hr_avg }} bpm |
+| Sleep avg | {{ metrics.sleep_total_h }} h/night |
+| Sleep deep avg | {{ metrics.sleep_deep_h }} h |
+| Sleep REM avg | {{ metrics.sleep_rem_h }} h |
+| Sleep efficiency | {{ metrics.sleep_efficiency_pct }}% |
+| Steps avg | {{ metrics.steps_avg }}/day |
+| Active kcal avg | {{ metrics.active_kcal_avg }} kcal/day |
+| Exercise min avg | {{ metrics.exercise_min_avg }} min/day |
+| Total distance | {{ metrics.total_distance_km }} km |
+| Avg TDEE | {{ metrics.avg_tdee }} kcal |
+| VO2 Max | {{ metrics.vo2_max }} (prior: {{ metrics.vo2_max_prior }}) |
+| Weight avg | {{ metrics.weight_kg_avg }} kg |
+| Body fat avg | {{ metrics.body_fat_pct_avg }}% |
+
+---
+
+### Week-over-week deltas
+{% for key, delta in deltas.week_over_week.items() %}
+{% if delta is not none %}
+- **{{ key }}**: {{ delta.diff }} ({{ delta.pct }}%)
+{% endif %}
+{% endfor %}
+
+---
+
+### 4-week rolling averages
+{% for key, avg in deltas.rolling_4w_avg.items() %}
+- **{{ key }}**: {{ avg }}
+{% endfor %}
+
+---
+
+### vs 3 months ago
+{% if deltas.weeks_of_history >= 4 %}
+{% for key, delta in deltas.vs_3_months_ago.items() %}
+{% if delta is not none %}
+- **{{ key }}**: {{ delta.diff }} ({{ delta.pct }}%)
+{% endif %}
+{% endfor %}
+{% else %}
+Not enough history yet.
+{% endif %}
+
+---
+
+### Workouts this week
+{% if workouts %}
+{% for w in workouts %}
+- {{ w.date }} {{ w.type }}: {{ w.duration_min }} min
+  {%- if w.distance_km %}, {{ w.distance_km }} km{% endif %}
+  {%- if w.avg_hr_bpm %}, avg HR {{ w.avg_hr_bpm }} bpm{% endif %}
+  {%- if w.active_kcal %}, {{ w.active_kcal }} kcal{% endif %}
+{% endfor %}
+{% else %}
+No workouts recorded.
+{% endif %}

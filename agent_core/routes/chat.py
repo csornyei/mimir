@@ -10,14 +10,15 @@ from agent_core.agent.tool_schema import tool_schema_registry
 from agent_core.agent.types import RunContext
 from agent_core.config import agent_config
 from agent_core.llm.messages import build_messages
-from agent_core.llm.params import LLMParams
+from agent_core.llm.params import LLMParams, llm_params_from_settings
 from agent_core.llm.prompt import format_episodic_context
+from agent_core.llm.client import llm_client
 from agent_core.memory.episodic import EpisodicMemory
 from agent_core.memory.semantic import SemanticMemory
 from agent_core.rag.context import retrieve_rag_context
 from shared.db import get_db
 from shared.logger import logger
-from shared.schemas import ChatRequest, ChatResponse
+from shared.schemas import ChatRequest, ChatResponse, RawChatRequest
 
 router = APIRouter()
 
@@ -46,7 +47,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         )
 
         # Each step is explicit so the future WS handler can emit progress between them
-        semantic_memory_content = semantic_memory.read()
+        semantic_memory_content = await semantic_memory.read()
         rag_context, _, _ = await retrieve_rag_context(
             request.message, db, agent_config.rag_max_tokens
         )
@@ -93,3 +94,47 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
         return ChatResponse(
             response=result.content, conversation_id=request.conversation_id
         )
+
+
+@router.post("/raw")
+async def raw_chat(request: RawChatRequest, db: AsyncSession = Depends(get_db)):
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        conversation_id=request.conversation_id,
+        user_id=request.user_id,
+    )
+
+    with _tracer.start_as_current_span("chat.raw_request") as span:
+        span.set_attribute("chat.conversation_id", request.conversation_id)
+        span.set_attribute("chat.user_id", request.user_id)
+        span.set_attribute(
+            "chat.message_length", len("".join(m.content for m in request.messages))
+        )
+
+        await conversation_manager.get_or_create_conversation(
+            db, request.conversation_id
+        )
+        for msg in request.messages:
+            await conversation_manager.add_message(
+                db, request.conversation_id, msg.role, msg.content
+            )
+
+        llm_params = llm_params_from_settings(request.llm_parameters)
+
+        response = await llm_client.complete(
+            messages=[m.model_dump() for m in request.messages], params=llm_params
+        )
+
+        await conversation_manager.add_message(
+            db, request.conversation_id, "assistant", response.get("content", "")
+        )
+
+        if thinking := response.get("thinking"):
+            await conversation_manager.add_message(
+                db,
+                request.conversation_id,
+                "assistant|thinking",
+                str(thinking),
+            )
+
+        return response

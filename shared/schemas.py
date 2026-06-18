@@ -92,6 +92,7 @@ class LLMSettings(BaseModel):
     min_p: float = 0.05
     repetition_penalty: float = 1.0
     max_tokens: int = 4096
+    response_format: Literal["json"] | None = None
 
 
 # ── WebSocket ────────────────────────────────────────────────────────────────
@@ -187,7 +188,6 @@ class ModelsResponse(BaseModel):
 
 
 class LLMPreset(BaseModel):
-    name: str
     label: str
     enable_thinking: bool
     thinking_budget: int | None
@@ -199,5 +199,17 @@ class LLMPreset(BaseModel):
 
 
 class PresetsResponse(BaseModel):
-    presets: list[LLMPreset]
+    presets: dict[str, LLMPreset]
     default_preset: str
+
+
+class Message(BaseModel):
+    role: str
+    content: str
+
+
+class RawChatRequest(BaseModel):
+    conversation_id: str
+    user_id: str
+    messages: list[Message]
+    llm_parameters: LLMSettings

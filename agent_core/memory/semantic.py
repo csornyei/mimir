@@ -1,38 +1,35 @@
-from pathlib import Path
 from datetime import datetime
+
 from agent_core.config import agent_config
+from shared.file_api import get_file_api_client
+
+
+def _vault_relative(path: str) -> str:
+    return path.removeprefix("vault/")
 
 
 class SemanticMemory:
-    """
-    Reads and writes the memory.md file in the Obsidian vault.
-    """
+    """Reads and writes the semantic memory file via the File API."""
 
-    def __init__(self, path: str | Path | None = None):
-        self._path: Path = (
-            Path(path) if path is not None else Path(agent_config.semantic_memory_path)
+    def __init__(self, vault_path: str | None = None) -> None:
+        self._vault_path: str = (
+            vault_path
+            if vault_path is not None
+            else _vault_relative(agent_config.semantic_memory_path)
         )
 
-    def read(self) -> str:
-        if not self._path.exists():
-            return ""
+    async def read(self) -> str:
+        return await get_file_api_client().read_file(self._vault_path)
 
-        return self._path.read_text(encoding="utf-8")
+    async def write(self, content: str) -> None:
+        await get_file_api_client().save_file(self._vault_path, content)
 
-    def write(self, content: str) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-
-        self._path.write_text(content, encoding="utf-8")
-
-    def append_fact(self, fact: str) -> None:
+    async def append_fact(self, fact: str) -> None:
         """Append a new fact to the memory file under a ## New Facts section."""
-
-        current = self.read()
-
+        current = await self.read()
         timestamp = datetime.now().strftime("%Y-%m-%d")
-
         entry = f"\n- ({timestamp}) {fact}"
         if "## New Facts" in current:
-            self.write(current + entry)
+            await self.write(current + entry)
         else:
-            self.write(current + f"\n\n## New Facts\n{entry}")
+            await self.write(current + f"\n\n## New Facts\n{entry}")

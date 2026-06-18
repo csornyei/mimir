@@ -26,15 +26,6 @@ def _make_action(
 
 
 @pytest.fixture(autouse=True)
-def patch_slack(mocker):
-    """Replace the module-level _slack client with an AsyncMock."""
-    mock = AsyncMock()
-    mock.chat_postMessage.return_value = {"ts": "999.000"}
-    mocker.patch("agent_core.agent.approval.manager._slack", mock)
-    return mock
-
-
-@pytest.fixture(autouse=True)
 def patch_config(mocker):
     mocker.patch(
         "agent_core.agent.approval.manager.agent_config.slack_dm_channel_id",
@@ -53,15 +44,9 @@ def patch_config(mocker):
 # ---------------------------------------------------------------------------
 
 
-async def test_request_approval_creates_db_record_and_posts_to_slack(
-    mocker, patch_slack
-):
+async def test_request_approval_creates_db_record(mocker):
     mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.create = AsyncMock(return_value=_make_action())
-    mocker.patch(
-        "agent_core.agent.approval.manager._format_approval_message",
-        return_value="Approve?",
-    )
 
     session = AsyncMock()
     from agent_core.agent.approval import manager
@@ -72,22 +57,13 @@ async def test_request_approval_creates_db_record_and_posts_to_slack(
         triggered_by="user:U123",
     )
 
-    patch_slack.chat_postMessage.assert_called_once()
     mock_store.create.assert_called_once()
     assert result is not None
 
 
-async def test_request_approval_creates_record_with_fallback_ts_if_slack_fails(
-    mocker, patch_slack
-):
-    # Slack failure is best-effort — the DB record must still be created
-    patch_slack.chat_postMessage.side_effect = RuntimeError("Slack down")
+async def test_request_approval_creates_record(mocker):
     mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.create = AsyncMock(return_value=_make_action())
-    mocker.patch(
-        "agent_core.agent.approval.manager._format_approval_message",
-        return_value="Approve?",
-    )
 
     session = AsyncMock()
     from agent_core.agent.approval import manager
@@ -107,7 +83,7 @@ async def test_request_approval_creates_record_with_fallback_ts_if_slack_fails(
 # ---------------------------------------------------------------------------
 
 
-async def test_handle_reaction_approve_executes_and_completes(mocker, patch_slack):
+async def test_handle_reaction_approve_executes_and_completes(mocker):
     action = _make_action()
     mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=action)
@@ -123,14 +99,9 @@ async def test_handle_reaction_approve_executes_and_completes(mocker, patch_slac
     await manager.handle_reaction(session, "white_check_mark", "111.222", "U999")
 
     assert mock_store.set_status.call_count >= 2
-    patch_slack.chat_postMessage.assert_called()
-    last_call = patch_slack.chat_postMessage.call_args_list[-1]
-    assert "✅" in last_call.kwargs.get("text", "") or "✅" in str(last_call)
 
 
-async def test_handle_reaction_approve_posts_error_on_executor_failure(
-    mocker, patch_slack
-):
+async def test_handle_reaction_approve_handles_executor_failure(mocker):
     action = _make_action()
     mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=action)
@@ -145,13 +116,16 @@ async def test_handle_reaction_approve_posts_error_on_executor_failure(
 
     await manager.handle_reaction(session, "white_check_mark", "111.222", "U999")
 
-    texts = [
-        c.kwargs.get("text", "") for c in patch_slack.chat_postMessage.call_args_list
-    ]
-    assert any("⚠️" in t for t in texts)
+    # Verify status was changed to rejected on error
+    calls = mock_store.set_status.call_args_list
+    final_call = calls[-1]
+    assert (
+        final_call.args[2] == ActionStatus.rejected
+        or final_call.kwargs.get("status") == ActionStatus.rejected
+    )
 
 
-async def test_handle_reaction_reject_sets_rejected_status(mocker, patch_slack):
+async def test_handle_reaction_reject_sets_rejected_status(mocker):
     action = _make_action()
     mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_message_ts = AsyncMock(return_value=action)
@@ -168,10 +142,6 @@ async def test_handle_reaction_reject_sets_rejected_status(mocker, patch_slack):
         call_args.args[2] == ActionStatus.rejected
         or call_args.kwargs.get("status") == ActionStatus.rejected
     )
-    texts = [
-        c.kwargs.get("text", "") for c in patch_slack.chat_postMessage.call_args_list
-    ]
-    assert any("❌" in t for t in texts)
 
 
 async def test_handle_reaction_ignores_unknown_emoji(mocker):
@@ -221,9 +191,7 @@ async def test_handle_reaction_not_found(mocker):
 # ---------------------------------------------------------------------------
 
 
-async def test_handle_thread_reply_transitions_pending_to_discussing(
-    mocker, patch_slack
-):
+async def test_handle_thread_reply_transitions_pending_to_discussing(mocker):
     action = _make_action(status=ActionStatus.pending)
     mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_by_thread_ts = AsyncMock(return_value=action)
@@ -264,7 +232,7 @@ async def test_handle_thread_reply_returns_false_if_no_action(mocker):
 # ---------------------------------------------------------------------------
 
 
-async def test_process_timeouts_rejects_expired_actions(mocker, patch_slack):
+async def test_process_timeouts_rejects_expired_actions(mocker):
     actions = [_make_action(), _make_action()]
     mock_store = mocker.patch("agent_core.agent.approval.manager.store")
     mock_store.get_timed_out = AsyncMock(return_value=actions)
@@ -276,4 +244,3 @@ async def test_process_timeouts_rejects_expired_actions(mocker, patch_slack):
     await manager.process_timeouts(session)
 
     assert mock_store.set_status.call_count == 2
-    assert patch_slack.chat_postMessage.call_count == 2

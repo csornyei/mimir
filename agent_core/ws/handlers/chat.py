@@ -108,7 +108,7 @@ async def handle_chat(sender: WSSender, data: dict) -> None:
             ws_registry.register(conversation_id, sender)
 
             try:
-                semantic_memory_content = _semantic_memory.read()
+                semantic_memory_content = await _semantic_memory.read()
 
                 async with get_session() as db:
                     rag_context, _chunks_used, rag_sources = await retrieve_rag_context(

@@ -109,6 +109,27 @@ jobs:
             dockerfile: docker/Dockerfile.migrations
           - name: web_fetch
             dockerfile: docker/Dockerfile.web_fetch
+          - name: morning-briefing
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=morning_briefing.main
+          - name: rss-fetcher
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=rss_digest.fetcher
+          - name: rss-summarizer
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=rss_digest.summarizer
+          - name: rss-collector
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=rss_digest.collector
+          - name: health-coach
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=health_coach.main
+          - name: health-coach-analyze
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=health_coach.analyze
+          - name: health-coach-summarize
+            dockerfile: docker/Dockerfile.workflow
+            build_args: module=health_coach.summarize
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -144,6 +165,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_args }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |

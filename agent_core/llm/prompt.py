@@ -2,11 +2,12 @@ from datetime import datetime
 
 from agent_core.config import agent_config
 from agent_core.prompts import render_system_prompt, render_tool_instructions
+from shared.tokens import count_tokens, truncate_to_tokens
 
 
 def token_estimate(text: str) -> int:
-    """Rough token count: 1 token ≈ 4 characters. Model-agnostic."""
-    return len(text) // 4
+    """Token count via the shared tiktoken encoding."""
+    return count_tokens(text)
 
 
 def trim_to_tokens(text: str, max_tokens: int) -> str:
@@ -19,8 +20,8 @@ def trim_to_tokens(text: str, max_tokens: int) -> str:
         return "[... truncated]"
     if token_estimate(text) <= max_tokens:
         return text
-    max_chars = max_tokens * 4
-    truncated = text[:max_chars]
+    # Reserve a few tokens for the truncation marker.
+    truncated = truncate_to_tokens(text, max(max_tokens - 4, 1))
     last_space = truncated.rfind(" ")
     if last_space > 0:
         truncated = truncated[:last_space]
