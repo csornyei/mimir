@@ -71,7 +71,7 @@ export function MessageBubble({ message }: Props) {
                             </p>
                         ) : (
                             <>
-                                <div className="prose prose-sm prose-invert max-w-none">
+                                <div className="prose prose-sm dark:prose-invert max-w-none">
                                     <ReactMarkdown
                                         rehypePlugins={[rehypeHighlight]}
                                     >
@@ -84,7 +84,7 @@ export function MessageBubble({ message }: Props) {
                                 {/* Mobile info button — only when metadata is available */}
                                 {message.metadata && (
                                     <button
-                                        className="text-muted-foreground/60 hover:text-muted-foreground absolute top-2 right-2 transition-colors md:hidden"
+                                        className="text-muted-foreground/60 hover:text-muted-foreground absolute top-1 right-1 p-2 transition-colors md:hidden"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setSheetOpen(true);
@@ -102,7 +102,7 @@ export function MessageBubble({ message }: Props) {
 
             {message.metadata && (
                 <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-                    <SheetContent side="bottom" className="h-[65vh] p-0">
+                    <SheetContent side="bottom" className="h-[65dvh] p-0">
                         <SheetHeader className="border-border border-b px-4 pt-4 pb-2">
                             <SheetTitle className="text-sm">
                                 Response Context

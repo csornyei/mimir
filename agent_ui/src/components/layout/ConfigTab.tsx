@@ -59,6 +59,8 @@ export function ConfigTab() {
         ragParams,
         debugMode,
         setDebugMode,
+        enterToSend,
+        setEnterToSend,
         setLLMParam,
         setRagParam,
         resetRagParams,
@@ -261,6 +263,21 @@ export function ConfigTab() {
                                         </div>
                                     ))}
                                 </dl>
+                            </div>
+                            <Separator />
+                            <div className="space-y-2">
+                                <p className="text-muted-foreground text-xs tracking-wide uppercase">
+                                    Input
+                                </p>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-muted-foreground text-xs">
+                                        Enter sends message
+                                    </label>
+                                    <Switch
+                                        checked={enterToSend}
+                                        onCheckedChange={setEnterToSend}
+                                    />
+                                </div>
                             </div>
                         </div>
                     )}

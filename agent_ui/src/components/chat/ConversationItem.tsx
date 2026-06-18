@@ -65,7 +65,7 @@ export function ConversationItem({ conversation }: Props) {
 
                 <DropdownMenu>
                     <DropdownMenuTrigger
-                        className="hover:bg-accent ml-1 shrink-0 rounded p-0.5 opacity-0 group-hover:opacity-100"
+                        className="hover:bg-accent ml-1 shrink-0 rounded p-1 opacity-0 group-hover:opacity-100 max-md:opacity-100"
                         onClick={(e) => e.stopPropagation()}
                         aria-label="Conversation options"
                     >

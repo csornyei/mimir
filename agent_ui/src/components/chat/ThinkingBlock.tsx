@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CaretDown } from "@phosphor-icons/react";
+import { Brain, CaretDown } from "@phosphor-icons/react";
 import {
     Collapsible,
     CollapsibleContent,
@@ -18,7 +18,7 @@ export function ThinkingBlock({ content, tokenCount, isStreaming }: Props) {
     return (
         <Collapsible open={open} onOpenChange={setOpen}>
             <CollapsibleTrigger className="bg-muted/40 border-border text-muted-foreground hover:text-foreground flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors">
-                <span>💭</span>
+                <Brain className="h-3.5 w-3.5 shrink-0" />
                 <span>
                     {isStreaming
                         ? "Thinking…"

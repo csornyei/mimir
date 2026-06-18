@@ -62,7 +62,9 @@ export function BriefScreen() {
     return (
         <div className="flex h-full flex-col overflow-hidden">
             <div className="border-border shrink-0 border-b px-6 py-4">
-                <h1 className="text-base font-semibold">Morning Brief</h1>
+                <h1 className="font-heading text-xl font-semibold tracking-tight">
+                    Morning Brief
+                </h1>
                 {latest && (
                     <p className="text-muted-foreground mt-1 text-xs">
                         {latest.date}
@@ -83,7 +85,8 @@ export function BriefScreen() {
                         </div>
                     ) : !latest ? (
                         <p className="text-muted-foreground pt-8 text-center text-sm">
-                            No morning brief yet.
+                            No brief yet — your first morning brief appears here
+                            once the scheduler runs.
                         </p>
                     ) : (
                         <>

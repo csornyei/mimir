@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMimirStore } from "@/store";
 import { ConversationItem } from "@/components/chat/ConversationItem";
 import { ConversationSearch } from "@/components/chat/ConversationSearch";
+import { ThemeToggle } from "@/components/controls/ThemeToggle";
 import type { ConversationSummary } from "@/types";
 
 function groupByDate(
@@ -119,6 +120,7 @@ export function LeftSidebar({ onOpenSearch }: LeftSidebarProps) {
                     <RssIcon className="h-4 w-4" />
                     RSS Digest
                 </Link>
+                <ThemeToggle />
             </nav>
         </div>
     );

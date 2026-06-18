@@ -48,7 +48,9 @@ export function MemoryScreen() {
     return (
         <div className="flex h-full flex-col overflow-hidden">
             <div className="border-border flex shrink-0 items-center justify-between border-b px-6 py-4">
-                <h1 className="text-base font-semibold">Memory</h1>
+                <h1 className="font-heading text-xl font-semibold tracking-tight">
+                    Memory
+                </h1>
                 <div className="flex gap-2">
                     {editing ? (
                         <>
@@ -100,11 +102,11 @@ export function MemoryScreen() {
                         <Textarea
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
-                            className="min-h-[60vh] resize-none font-mono text-sm"
+                            className="min-h-[60dvh] resize-none font-mono text-sm"
                             spellCheck={false}
                         />
                     ) : content ? (
-                        <div className="prose prose-sm prose-invert max-w-none">
+                        <div className="prose prose-sm dark:prose-invert max-w-none">
                             <ReactMarkdown>{content}</ReactMarkdown>
                         </div>
                     ) : (

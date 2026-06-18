@@ -87,7 +87,9 @@ export function DigestScreen() {
     return (
         <div className="flex h-full flex-col overflow-hidden">
             <div className="border-border shrink-0 border-b px-6 py-4">
-                <h1 className="text-base font-semibold">RSS Digest</h1>
+                <h1 className="font-heading text-xl font-semibold tracking-tight">
+                    RSS Digest
+                </h1>
                 {latestRun && (
                     <p className="text-muted-foreground mt-1 text-xs">
                         {formatRunLabel(latestRun)} · {latestRun.article_count}{" "}
@@ -109,7 +111,8 @@ export function DigestScreen() {
                         </div>
                     ) : !latestRun ? (
                         <p className="text-muted-foreground pt-8 text-center text-sm">
-                            No digest yet.
+                            No digest yet — articles from your RSS feeds gather
+                            here after the next run.
                         </p>
                     ) : (
                         <>

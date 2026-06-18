@@ -68,6 +68,7 @@ interface MimirStore {
     activeConversationId: string | null;
     messages: Message[];
     isStreaming: boolean;
+    streamingConversationId: string | null;
     conversationLoading: boolean;
     conversationTitles: Record<string, string>;
     setActiveConversation: (id: string | null) => void;
@@ -102,6 +103,10 @@ interface MimirStore {
     // Debug mode (persisted)
     debugMode: boolean;
     setDebugMode: (on: boolean) => void;
+
+    // Input behaviour (persisted)
+    enterToSend: boolean;
+    setEnterToSend: (on: boolean) => void;
 
     // Presets & models (fetched)
     presets: Record<string, LLMPreset>;
@@ -192,7 +197,18 @@ export const useMimirStore = create<MimirStore>()(
                 };
 
                 ws.onclose = () => {
-                    set({ wsStatus: "disconnected", ws: null });
+                    // Clear any in-flight stream: `done` will never arrive on a
+                    // dropped socket, which would otherwise leave the input
+                    // disabled until a manual reload.
+                    set((s) => ({
+                        wsStatus: "disconnected",
+                        ws: null,
+                        isStreaming: false,
+                        streamingConversationId: null,
+                        messages: s.messages.map((m) =>
+                            m.isStreaming ? { ...m, isStreaming: false } : m
+                        ),
+                    }));
                     _wasDisconnected = true;
                     toast.warning("Disconnected from Mimir — reconnecting…", {
                         id: "ws-disconnect",
@@ -206,6 +222,7 @@ export const useMimirStore = create<MimirStore>()(
             activeConversationId: null,
             messages: [],
             isStreaming: false,
+            streamingConversationId: null,
             conversationLoading: false,
             conversationTitles: {},
 
@@ -216,18 +233,25 @@ export const useMimirStore = create<MimirStore>()(
                 })),
 
             loadConversations: async () => {
-                const res = await fetch("/api/conversations");
-                const data: ConversationSummary[] = await res.json();
-                const titles = get().conversationTitles;
-                const conversations = data.map((c) =>
-                    titles[c.id] ? { ...c, title: titles[c.id] } : c
-                );
-                // Prune titles for conversations that no longer exist on the server
-                const validIds = new Set(data.map((c) => c.id));
-                const prunedTitles = Object.fromEntries(
-                    Object.entries(titles).filter(([id]) => validIds.has(id))
-                );
-                set({ conversations, conversationTitles: prunedTitles });
+                try {
+                    const res = await fetch("/api/conversations");
+                    if (!res.ok) return;
+                    const data: ConversationSummary[] = await res.json();
+                    const titles = get().conversationTitles;
+                    const conversations = data.map((c) =>
+                        titles[c.id] ? { ...c, title: titles[c.id] } : c
+                    );
+                    // Prune titles for conversations that no longer exist on the server
+                    const validIds = new Set(data.map((c) => c.id));
+                    const prunedTitles = Object.fromEntries(
+                        Object.entries(titles).filter(([id]) =>
+                            validIds.has(id)
+                        )
+                    );
+                    set({ conversations, conversationTitles: prunedTitles });
+                } catch (err) {
+                    console.error("[mimir] failed to load conversations:", err);
+                }
             },
 
             loadConversation: async (id) => {
@@ -244,12 +268,17 @@ export const useMimirStore = create<MimirStore>()(
                     }
                     const data = await res.json();
                     const uiMessages = data.messages.map(apiMessageToUiMessage);
+                    // A user-set title (persisted in conversationTitles) wins
+                    // over the derived first-message title.
+                    const customTitle = get().conversationTitles[id];
                     const firstUser = uiMessages.find(
                         (m: Message) => m.role === "user"
                     );
-                    const title = firstUser
-                        ? firstUser.content.substring(0, 60)
-                        : "New conversation";
+                    const title =
+                        customTitle ??
+                        (firstUser
+                            ? firstUser.content.substring(0, 60)
+                            : "New conversation");
                     set((s) => ({
                         messages: uiMessages,
                         conversations: s.conversations.map((c) =>
@@ -262,12 +291,22 @@ export const useMimirStore = create<MimirStore>()(
             },
 
             createConversation: async () => {
-                const res = await fetch("/api/conversations", {
-                    method: "POST",
-                });
-                const conv: ConversationSummary = await res.json();
-                set((s) => ({ conversations: [conv, ...s.conversations] }));
-                return conv.id;
+                try {
+                    const res = await fetch("/api/conversations", {
+                        method: "POST",
+                    });
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const conv: ConversationSummary = await res.json();
+                    set((s) => ({ conversations: [conv, ...s.conversations] }));
+                    return conv.id;
+                } catch (err) {
+                    console.error(
+                        "[mimir] failed to create conversation:",
+                        err
+                    );
+                    toast.error("Failed to create conversation");
+                    throw err;
+                }
             },
 
             deleteConversation: async (id) => {
@@ -332,6 +371,11 @@ export const useMimirStore = create<MimirStore>()(
                 set((s) => ({
                     messages: [...s.messages, userMessage, assistantMessage],
                     isStreaming: true,
+                    // Anchor the stream to the conversation it belongs to so
+                    // late events don't leak into a different conversation the
+                    // user has since navigated to. `null` for a brand-new chat
+                    // until the backend assigns an id on the first response.
+                    streamingConversationId: activeConversationId,
                 }));
 
                 ws.send(
@@ -347,6 +391,29 @@ export const useMimirStore = create<MimirStore>()(
 
             appendStreamEvent: (event) => {
                 set((s) => {
+                    // Correlation guard: if the user has navigated away from the
+                    // conversation this stream belongs to, drop its content
+                    // events so they don't leak into the conversation now in
+                    // view. `done`/`error` still clear the streaming flags.
+                    // (streamId === null = brand-new chat whose id isn't assigned
+                    // yet; let those through and adopt the id on first response.)
+                    const streamId = s.streamingConversationId;
+                    const isStale =
+                        streamId !== null &&
+                        s.activeConversationId !== streamId;
+                    if (isStale) {
+                        if (event.type === "done") {
+                            setTimeout(() => get().loadConversations(), 0);
+                        }
+                        if (event.type === "done" || event.type === "error") {
+                            return {
+                                isStreaming: false,
+                                streamingConversationId: null,
+                            };
+                        }
+                        return {};
+                    }
+
                     const msgs = [...s.messages];
                     const lastIdx = msgs.length - 1;
                     if (lastIdx < 0) return {};
@@ -369,12 +436,16 @@ export const useMimirStore = create<MimirStore>()(
                             const updates: Partial<MimirStore> = {
                                 messages: msgs,
                             };
-                            // Capture conversation_id created by backend for new chats
+                            // Capture conversation_id created by backend for new
+                            // chats, and anchor the stream to it so subsequent
+                            // events stay correlated.
                             if (
                                 event.conversation_id &&
                                 !s.activeConversationId
                             ) {
                                 updates.activeConversationId =
+                                    event.conversation_id;
+                                updates.streamingConversationId =
                                     event.conversation_id;
                             }
                             return updates;
@@ -542,7 +613,11 @@ export const useMimirStore = create<MimirStore>()(
                         case "error":
                             toast.error(event.message);
                             msgs[lastIdx] = { ...last, isStreaming: false };
-                            return { messages: msgs, isStreaming: false };
+                            return {
+                                messages: msgs,
+                                isStreaming: false,
+                                streamingConversationId: null,
+                            };
 
                         case "done":
                             msgs[lastIdx] = {
@@ -552,7 +627,11 @@ export const useMimirStore = create<MimirStore>()(
                             };
                             // Refresh sidebar so new conversations appear
                             setTimeout(() => get().loadConversations(), 0);
-                            return { messages: msgs, isStreaming: false };
+                            return {
+                                messages: msgs,
+                                isStreaming: false,
+                                streamingConversationId: null,
+                            };
 
                         default:
                             return {};
@@ -607,6 +686,10 @@ export const useMimirStore = create<MimirStore>()(
             // Debug mode
             debugMode: false,
             setDebugMode: (on) => set({ debugMode: on }),
+
+            // Input behaviour
+            enterToSend: true,
+            setEnterToSend: (on) => set({ enterToSend: on }),
 
             // Presets & models
             presets: {},
@@ -749,6 +832,7 @@ export const useMimirStore = create<MimirStore>()(
                 conversationTitles: s.conversationTitles,
                 ragParams: s.ragParams,
                 debugMode: s.debugMode,
+                enterToSend: s.enterToSend,
             }),
         }
     )

@@ -12,6 +12,8 @@
         "format": "prettier --write ."
     },
     "dependencies": {
+        "@fontsource-variable/fraunces": "^5.2.9",
+        "@fontsource-variable/hanken-grotesk": "^5.2.8",
         "@fontsource-variable/jetbrains-mono": "^5.2.8",
         "@fontsource-variable/montserrat": "^5.2.8",
         "@phosphor-icons/react": "^2.1.10",

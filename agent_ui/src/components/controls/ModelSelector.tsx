@@ -15,19 +15,20 @@ export function ModelSelector() {
                 Model
             </p>
             {models.length === 0 ? (
-                <div className="text-foreground/80 text-sm">
-                    No models available
-                </div>
+                <p className="text-muted-foreground text-xs">
+                    No models loaded — start one with{" "}
+                    <code className="font-mono">make gemma</code>.
+                </p>
             ) : (
                 <select
                     value={settings.model ?? ""}
                     onChange={(e) => setModel(e.target.value || undefined)}
-                    className="border-input bg-background text-foreground w-full rounded-md border px-2 py-1.5 text-xs focus:outline-none"
+                    className="border-input bg-background text-foreground focus-visible:ring-ring w-full rounded-md border px-2 py-1.5 text-xs focus-visible:ring-2 focus-visible:outline-none"
                 >
                     <option value="">Default</option>
                     {models.map((m) => (
                         <option key={m.name} value={m.name}>
-                            {m.is_loaded ? "⚡ " : ""}
+                            {m.is_loaded ? "● " : ""}
                             {m.name}
                             {m.size ? ` · ${formatSize(m.size)}` : ""}
                         </option>

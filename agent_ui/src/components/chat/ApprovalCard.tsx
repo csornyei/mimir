@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { Warning } from "@phosphor-icons/react";
+import type { Icon } from "@phosphor-icons/react";
+import {
+    CheckCircle,
+    Clock,
+    Hourglass,
+    PencilSimple,
+    Warning,
+    WarningCircle,
+    XCircle,
+} from "@phosphor-icons/react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,17 +28,20 @@ interface Props {
 }
 
 function StatusBadge({
-    icon,
+    icon: Icon,
     text,
     className,
 }: {
-    icon: string;
+    icon: Icon;
     text: string;
     className: string;
 }) {
     return (
-        <div className={`rounded-lg border px-3 py-2 text-xs ${className}`}>
-            {icon} {text}
+        <div
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs ${className}`}
+        >
+            <Icon className="h-3.5 w-3.5 shrink-0" weight="fill" />
+            <span>{text}</span>
         </div>
     );
 }
@@ -46,7 +58,7 @@ export function ApprovalCard({ card }: Props) {
     if (card.status === "approved") {
         return (
             <StatusBadge
-                icon="⏳"
+                icon={Hourglass}
                 text="Approved — executing…"
                 className="border-amber-900/60 bg-amber-950/30 text-amber-400"
             />
@@ -55,7 +67,7 @@ export function ApprovalCard({ card }: Props) {
     if (card.status === "completed") {
         return (
             <StatusBadge
-                icon="✅"
+                icon={CheckCircle}
                 text="Completed"
                 className="border-green-900/60 bg-green-950/30 text-green-400"
             />
@@ -64,7 +76,7 @@ export function ApprovalCard({ card }: Props) {
     if (card.status === "failed") {
         return (
             <StatusBadge
-                icon="⚠️"
+                icon={WarningCircle}
                 text="Execution failed"
                 className="border-red-900/60 bg-red-950/30 text-red-400"
             />
@@ -73,7 +85,7 @@ export function ApprovalCard({ card }: Props) {
     if (card.status === "rejected") {
         return (
             <StatusBadge
-                icon="❌"
+                icon={XCircle}
                 text="Rejected"
                 className="border-red-900/60 bg-red-950/30 text-red-400"
             />
@@ -82,7 +94,7 @@ export function ApprovalCard({ card }: Props) {
     if (card.status === "timeout") {
         return (
             <StatusBadge
-                icon="⏰"
+                icon={Clock}
                 text="Timed out"
                 className="border-zinc-700/60 bg-zinc-900/30 text-zinc-400"
             />
@@ -151,7 +163,10 @@ export function ApprovalCard({ card }: Props) {
                             {isSubmitting ? (
                                 <Spinner className="h-3 w-3" />
                             ) : (
-                                "✅ Approve"
+                                <>
+                                    <CheckCircle className="h-4 w-4" />
+                                    Approve
+                                </>
                             )}
                         </Button>
                         <Button
@@ -160,7 +175,8 @@ export function ApprovalCard({ card }: Props) {
                             disabled={isSubmitting}
                             onClick={() => setEditOpen(true)}
                         >
-                            ✏️ Edit &amp; approve
+                            <PencilSimple className="h-4 w-4" />
+                            Edit &amp; approve
                         </Button>
                         <Button
                             size="sm"
@@ -171,7 +187,10 @@ export function ApprovalCard({ card }: Props) {
                             {isSubmitting ? (
                                 <Spinner className="h-3 w-3" />
                             ) : (
-                                "❌ Reject"
+                                <>
+                                    <XCircle className="h-4 w-4" />
+                                    Reject
+                                </>
                             )}
                         </Button>
                     </div>
