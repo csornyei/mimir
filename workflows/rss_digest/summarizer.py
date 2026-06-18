@@ -9,6 +9,7 @@ import httpx
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind, StatusCode
 
+from shared.file_api import get_file_api_client
 from shared.logger import logger
 from shared.schemas import LLMSettings, Message, RawChatRequest
 from shared.telemetry import setup_tracing
@@ -29,9 +30,9 @@ def validate_config() -> bool:
     return True
 
 
-def _load_semantic_memory() -> str:
-    path = Path(config.semantic_memory_path)
-    return path.read_text(encoding="utf-8") if path.exists() else ""
+async def _load_semantic_memory() -> str:
+    vault_path = config.semantic_memory_path.removeprefix("vault/")
+    return await get_file_api_client().read_file(vault_path)
 
 
 def _extract_json_object(content: str) -> dict[str, Any] | None:
@@ -89,7 +90,7 @@ async def _summarize_one(
 async def summarize(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # Guaranteed non-None by validate_config; narrow for the type checker.
     assert config.agent_core_api_url is not None
-    semantic_memory = _load_semantic_memory()
+    semantic_memory = await _load_semantic_memory()
     summaries: list[dict[str, Any]] = []
     async with httpx.AsyncClient(
         base_url=config.agent_core_api_url, timeout=300.0

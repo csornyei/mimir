@@ -1,13 +1,13 @@
 import argparse
 import asyncio
 from datetime import date
-from pathlib import Path
 
 import httpx
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
 
 from shared.db import dispose_db, get_session, initialize_db
+from shared.file_api import get_file_api_client
 from shared.logger import logger
 from shared.models import HealthAnalysis
 from shared.prompts.loader import render
@@ -74,13 +74,15 @@ async def call_llm(week_start: date, analysis_md: str) -> str:
         ) as client:
             response = await client.post("/api/raw", json=payload.model_dump())
             response.raise_for_status()
+    body = response.json()
+    logger.info("llm_response", body)
     return response.json().get("content", "")  # type: ignore[no-any-return]
 
 
-def write_memory_file(content: str) -> None:
-    path = Path(config.health_memory_file_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+async def write_memory_file(content: str) -> None:
+    vault_path = config.health_memory_file_path.removeprefix("vault/")
+
+    await get_file_api_client().save_file(vault_path, content)
 
 
 async def run(week_start: date) -> None:
@@ -100,7 +102,8 @@ async def run(week_start: date) -> None:
             return
 
         summary_md = await call_llm(week_start, analysis.analysis_md)
-        write_memory_file(summary_md)
+
+        await write_memory_file(summary_md)
 
         logger.info(
             "health_summarize_done",

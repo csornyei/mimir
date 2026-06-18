@@ -69,6 +69,7 @@ class LLMClient:
                 if params.temperature is not None
                 else agent_config.llm_temperature
             ),
+            "stream": False,
         }
         if params.top_p is not None:
             payload["top_p"] = params.top_p
@@ -77,9 +78,7 @@ class LLMClient:
         if params.repetition_penalty is not None:
             payload["repetition_penalty"] = params.repetition_penalty
         if params.enable_thinking is not None:
-            payload["enable_thinking"] = params.enable_thinking
-        if params.thinking_budget is not None:
-            payload["thinking_budget"] = params.thinking_budget
+            payload["think"] = params.enable_thinking
         if params.response_format is not None:
             payload["format"] = params.response_format
         if tools:
@@ -296,7 +295,7 @@ class LLMClient:
             try:
                 payload = self._build_payload(msgs, params, tools)
                 print("LLM Payload", payload)
-                response = await self._client.post("/v1/chat/completions", json=payload)
+                response = await self._client.post("api/chat", json=payload)
                 response.raise_for_status()
                 result = response.json()
 

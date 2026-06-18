@@ -20,20 +20,19 @@ services:
     env_file: .env
     environment:
       VAULT_PATH: /vault
-      SEMANTIC_MEMORY_PATH: /vault/memory.md
       ENV: production
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
       SERVICE_NAME: agent_core
       MCP_URL: http://mimir-mcp:8010
       # LLM_BASE_URL: http://host.docker.internal:8080
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      FILE_API_URL: ${FILE_API_URL:-http://file_api:8000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     profiles:
       - agent
     volumes:
       - ${VAULT_PATH:-./vault}:/vault
-      - ./scratch/memory.md:/vault/memory.md
     restart: unless-stopped
 
   mimir-slack:
@@ -65,15 +64,14 @@ services:
       ENV: production
       KUBECONFIG: /kubeconfig
       SEARXNG_URL: https://searxng:8080
-      SEMANTIC_MEMORY_PATH: /vault/memory.md
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
       SERVICE_NAME: mcp_server
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      FILE_API_URL: ${FILE_API_URL:-http://file_api:8000}
     profiles:
       - agent
     volumes:
       - ${KUBECONFIG:-~/.kube/config}:/kubeconfig:ro
-      - ./scratch/memory.md:/vault/memory.md
     restart: unless-stopped
 
   # ── Argo workflow pods ────────────────────────────────────────────────────
@@ -95,10 +93,7 @@ services:
       SERVICE_NAME: morning_briefing
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
       AGENT_CORE_API_URL: http://mimir-api:8000
-      SEMANTIC_MEMORY_PATH: /vault/memory.md
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
-    volumes:
-      - ./scratch/memory.md:/vault/memory.md
     profiles:
       - workflows
     restart: "no"
@@ -144,10 +139,9 @@ services:
       ENV: production
       SERVICE_NAME: rss_digest_summarizer
       AGENT_CORE_API_URL: http://mimir-api:8000
-      SEMANTIC_MEMORY_PATH: /vault/memory.md
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      FILE_API_URL: ${FILE_API_URL:-http://file_api:8000}
     volumes:
-      - ./scratch/memory.md:/vault/memory.md
       - ./scratch/rss_workflow:/tmp
     profiles:
       - workflows
@@ -221,9 +215,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://mimir:mimir@postgres:5432/mimir
       AGENT_CORE_API_URL: http://mimir-api:8000
       OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
+      FILE_API_URL: http://file_api:8000
       LOG_LEVEL: DEBUG
-    volumes:
-      - ./vault:/vault
     profiles:
       - workflows
     restart: "no"

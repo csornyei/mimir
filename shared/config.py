@@ -32,5 +32,7 @@ class SharedConfig(BaseSettings):
     ntfy_health_topic: str = "mimir-health-coach"
     mimir_host: Optional[str] = None
 
+    file_api_url: Optional[str] = None
+
 
 shared_config = SharedConfig()
