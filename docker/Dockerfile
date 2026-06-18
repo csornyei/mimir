@@ -1,3 +1,16 @@
+FROM node:24-alpine AS ui_builder
+
+WORKDIR /app
+
+COPY agent_ui/package.json agent_ui/package-lock.json ./
+
+RUN npm ci
+
+COPY agent_ui/ ./
+
+RUN npm run build
+
+
 FROM python:3.13-slim
 COPY --from=ghcr.io/astral-sh/uv:0.11.5 /uv /uvx /bin/
 
@@ -17,7 +30,7 @@ COPY agent_core agent_core/
 COPY scripts scripts/
 COPY shared shared/
 COPY config config/
-COPY agent_ui/dist agent_ui/dist/
+COPY --from=ui_builder /app/dist agent_ui/dist/
 COPY pyproject.toml uv.lock ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \

@@ -2,7 +2,8 @@ import json
 import re
 from collections.abc import Awaitable, Callable
 
-from httpx import AsyncClient, HTTPStatusError
+import openai
+from openai import AsyncOpenAI, NOT_GIVEN
 from opentelemetry import trace
 
 from agent_core.config import agent_config
@@ -41,17 +42,32 @@ def _extract_tool_calls(content: str) -> list[dict]:
     return calls
 
 
+def extract_content(message) -> str:
+    """Extract text content from a chat completion message.
+
+    Guards against the mlx-vlm empty-content-when-thinking bug: when enable_thinking
+    is active the server may return only a reasoning field with content absent entirely.
+    """
+    if message.content:
+        return message.content
+    extra = message.model_extra or {}
+    reasoning = extra.get("reasoning") or extra.get("reasoning_content") or ""
+    if reasoning:
+        logger.warning(
+            "llm_empty_content_fallback",
+            fallback="reasoning_field",
+            reasoning_preview=reasoning[:80],
+        )
+        return reasoning
+    return ""
+
+
 class LLMClient:
     def __init__(self) -> None:
-        headers = {
-            "Content-Type": "application/json",
-        }
-
-        if agent_config.api_key:
-            headers["Authorization"] = f"Bearer {agent_config.api_key}"
-
-        self._client = AsyncClient(
-            base_url=agent_config.llm_base_url, headers=headers, timeout=300.0
+        self._client = AsyncOpenAI(
+            base_url=agent_config.llm_base_url,
+            api_key=agent_config.api_key,
+            timeout=120.0,
         )
 
     def _build_payload(
@@ -60,7 +76,7 @@ class LLMClient:
         params: LLMParams,
         tools: list[dict] | None = None,
     ) -> dict:
-        payload: dict = {
+        kwargs: dict = {
             "model": params.model or agent_config.llm_model,
             "messages": messages,
             "max_tokens": params.max_tokens or agent_config.llm_max_tokens,
@@ -69,24 +85,26 @@ class LLMClient:
                 if params.temperature is not None
                 else agent_config.llm_temperature
             ),
-            "stream": False,
+            "tools": tools or NOT_GIVEN,
+            "tool_choice": "auto" if tools else NOT_GIVEN,
         }
         if params.top_p is not None:
-            payload["top_p"] = params.top_p
-        if params.min_p is not None:
-            payload["min_p"] = params.min_p
-        if params.repetition_penalty is not None:
-            payload["repetition_penalty"] = params.repetition_penalty
-        if params.enable_thinking is not None:
-            payload["think"] = params.enable_thinking
-        if params.response_format is not None:
-            payload["format"] = params.response_format
-        if tools:
-            payload["tools"] = tools
-            payload["tool_choice"] = "auto"
+            kwargs["top_p"] = params.top_p
 
-        print("LLM request Payload", payload)
-        return payload
+        extra: dict = {
+            # Always explicit — never rely on server default (empty-content-when-thinking bug)
+            "enable_thinking": (
+                params.enable_thinking if params.enable_thinking is not None else False
+            ),
+        }
+        if params.min_p is not None:
+            extra["min_p"] = params.min_p
+        if params.repetition_penalty is not None:
+            extra["repetition_penalty"] = params.repetition_penalty
+        # thinking_budget intentionally omitted — no-op on mlx-vlm server path; use max_tokens instead
+
+        kwargs["extra_body"] = extra
+        return kwargs
 
     async def complete(
         self,
@@ -124,22 +142,20 @@ class LLMClient:
             span.set_attribute("llm.streaming", True)
             span.set_attribute("llm.tools_available", len(tools) if tools else 0)
             candidates = [messages] + (fallbacks or [])
-            last_err: HTTPStatusError | None = None
+            last_err: openai.APIStatusError | None = None
 
             for attempt, msgs in enumerate(candidates):
                 try:
-                    payload = self._build_payload(msgs, params, tools)
-                    payload["stream"] = True
-
+                    kwargs = self._build_payload(msgs, params, tools)
                     result = await self._stream_request(
-                        span, payload, on_token, on_thinking_token, on_tool_pending
+                        span, kwargs, on_token, on_thinking_token, on_tool_pending
                     )
                     if attempt > 0:
                         span.set_attribute("llm.fallback_attempt", attempt)
                     return result
 
-                except HTTPStatusError as e:
-                    if e.response.status_code == 413:
+                except openai.APIStatusError as e:
+                    if e.status_code == 413:
                         span.set_attribute("llm.payload_too_large", True)
                         logger.warning(
                             "llm_stream_payload_too_large",
@@ -153,7 +169,7 @@ class LLMClient:
                         "llm_stream_error",
                         error=str(e),
                         error_type=type(e).__name__,
-                        status_code=e.response.status_code,
+                        status_code=e.status_code,
                         exc_info=True,
                     )
                     raise
@@ -173,71 +189,62 @@ class LLMClient:
     async def _stream_request(
         self,
         span: trace.Span,
-        payload: dict,
+        kwargs: dict,
         on_token: Callable[[str], Awaitable[None]],
         on_thinking_token: Callable[[str], Awaitable[None]] | None,
         on_tool_pending: Callable[[str, str], Awaitable[None]] | None = None,
     ) -> dict:
-        """Execute one SSE streaming request and return the accumulated result.
-
-        Ollama streams thinking in the `reasoning` delta field, content in `content`.
-        """
         content_acc = ""
         thinking_acc = ""
-        usage_chunk: dict | None = None
+        usage_chunk = None
         tool_calls_acc: dict[int, dict] = {}
 
-        async with self._client.stream(
-            "POST", "/v1/chat/completions", json=payload
-        ) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                data = line[6:]
-                if data.strip() == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
+        stream = await self._client.chat.completions.create(
+            stream=True,
+            stream_options={"include_usage": True},
+            **kwargs,
+        )
+        async for chunk in stream:
+            if not chunk.choices:
+                if chunk.usage:
+                    usage_chunk = chunk.usage
+                continue
 
-                if chunk.get("usage"):
-                    usage_chunk = chunk["usage"]
+            delta = chunk.choices[0].delta
 
-                choices = chunk.get("choices") or []
-                if not choices:
-                    continue
-                delta = choices[0].get("delta", {})
+            for tc_delta in delta.tool_calls or []:
+                idx: int = tc_delta.index or 0
+                if idx not in tool_calls_acc:
+                    call_id = tc_delta.id or ""
+                    name = (tc_delta.function.name if tc_delta.function else None) or ""
+                    tool_calls_acc[idx] = {
+                        "id": call_id,
+                        "function": {"name": name, "arguments": ""},
+                    }
+                    if on_tool_pending and name:
+                        await on_tool_pending(name, call_id)
+                if tc_delta.function and tc_delta.function.arguments:
+                    tool_calls_acc[idx]["function"]["arguments"] += (
+                        tc_delta.function.arguments
+                    )
 
-                # Accumulate tool call deltas; fire on_tool_pending on first chunk
-                for tc_delta in delta.get("tool_calls") or []:
-                    idx: int = tc_delta.get("index", 0)
-                    if idx not in tool_calls_acc:
-                        call_id = tc_delta.get("id", "")
-                        name = tc_delta.get("function", {}).get("name", "")
-                        tool_calls_acc[idx] = {
-                            "id": call_id,
-                            "function": {"name": name, "arguments": ""},
-                        }
-                        if on_tool_pending and name:
-                            await on_tool_pending(name, call_id)
-                    tool_calls_acc[idx]["function"]["arguments"] += tc_delta.get(
-                        "function", {}
-                    ).get("arguments", "")
+            # Thinking tokens — mlx-vlm extension; check both known field names defensively
+            delta_extra = delta.model_extra or {}
+            delta_thinking: str = (
+                delta_extra.get("reasoning")
+                or delta_extra.get("reasoning_content")
+                or ""
+            )
+            delta_content: str = delta.content or ""
 
-                # Ollama returns thinking in `reasoning`, response in `content`
-                delta_thinking: str = delta.get("reasoning") or ""
-                delta_content: str = delta.get("content") or ""
+            if delta_thinking:
+                thinking_acc += delta_thinking
+                if on_thinking_token:
+                    await on_thinking_token(delta_thinking)
 
-                if delta_thinking:
-                    thinking_acc += delta_thinking
-                    if on_thinking_token:
-                        await on_thinking_token(delta_thinking)
-
-                if delta_content:
-                    content_acc += delta_content
-                    await on_token(delta_content)
+            if delta_content:
+                content_acc += delta_content
+                await on_token(delta_content)
 
         tool_calls = [tool_calls_acc[i] for i in sorted(tool_calls_acc)]
 
@@ -254,8 +261,8 @@ class LLMClient:
         finish_reason = "tool_calls" if tool_calls else "stop"
 
         usage_dict = {
-            "prompt_tokens": (usage_chunk or {}).get("prompt_tokens", 0),
-            "completion_tokens": (usage_chunk or {}).get("completion_tokens", 0)
+            "prompt_tokens": (usage_chunk.prompt_tokens if usage_chunk else 0) or 0,
+            "completion_tokens": (usage_chunk.completion_tokens if usage_chunk else 0)
             or len(content_acc) // 4,
         }
 
@@ -263,8 +270,6 @@ class LLMClient:
         span.set_attribute("llm.streamed_thinking_len", len(thinking_acc))
         span.set_attribute("llm.tool_calls_count", len(tool_calls))
         span.set_attribute("llm.finish_reason", finish_reason)
-        span.set_attribute("llm.prompt_tokens", usage_dict["prompt_tokens"])
-        span.set_attribute("llm.completion_tokens", usage_dict["completion_tokens"])
         logger.info(
             "llm_stream_tokens",
             prompt_tokens=usage_dict["prompt_tokens"],
@@ -289,19 +294,16 @@ class LLMClient:
         fallbacks: list[list[dict]] | None = None,
     ) -> dict:
         candidates = [messages] + (fallbacks or [])
-        last_413: HTTPStatusError | None = None
+        last_413: openai.APIStatusError | None = None
 
         for attempt, msgs in enumerate(candidates):
             try:
-                payload = self._build_payload(msgs, params, tools)
-                print("LLM Payload", payload)
-                response = await self._client.post("api/chat", json=payload)
-                response.raise_for_status()
-                result = response.json()
+                kwargs = self._build_payload(msgs, params, tools)
+                result = await self._client.chat.completions.create(**kwargs)
 
-                logger.debug("llm_response_content", content=result)
+                logger.debug("llm_response_content", content=result.model_dump())
 
-                if "choices" not in result or len(result["choices"]) == 0:
+                if not result.choices:
                     return {
                         "content": '{"error": "No choices returned from LLM"}',
                         "thinking": "",
@@ -310,12 +312,12 @@ class LLMClient:
                         "usage": _EMPTY_USAGE.copy(),
                     }
 
-                usage = result.get("usage") or {}
-                prompt_tokens = usage.get("prompt_tokens") or sum(
+                usage = result.usage
+                prompt_tokens = (usage.prompt_tokens if usage else None) or sum(
                     len(m.get("content") or "") // 4 for m in msgs
                 )
-                completion_tokens = usage.get("completion_tokens") or 0
-                total_tokens = usage.get("total_tokens") or (
+                completion_tokens = (usage.completion_tokens if usage else None) or 0
+                total_tokens = (usage.total_tokens if usage else None) or (
                     prompt_tokens + completion_tokens
                 )
                 logger.info(
@@ -323,13 +325,9 @@ class LLMClient:
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
-                    estimated=not bool(usage),
+                    estimated=usage is None,
                 )
 
-                span.set_attribute("llm.prompt_tokens", prompt_tokens)
-                span.set_attribute("llm.completion_tokens", completion_tokens)
-                span.set_attribute("llm.total_tokens", total_tokens)
-                span.set_attribute("llm.tokens_estimated", not bool(usage))
                 if attempt > 0:
                     span.set_attribute("llm.fallback_attempt", attempt)
 
@@ -338,15 +336,27 @@ class LLMClient:
                     "completion_tokens": completion_tokens,
                 }
 
-                choice = result["choices"][0]
-                message = choice.get("message", {})
-                finish_reason = choice.get("finish_reason", "stop")
-                # Ollama returns thinking in `reasoning`, response in `content`
-                thinking: str = message.get("reasoning") or ""
-                clean_content: str = message.get("content") or ""
+                choice = result.choices[0]
+                message = choice.message
+                finish_reason = choice.finish_reason or "stop"
+                extra = message.model_extra or {}
+                thinking: str = (
+                    extra.get("reasoning") or extra.get("reasoning_content") or ""
+                )
+                clean_content = extract_content(message)
 
-                if tools and message.get("tool_calls"):
-                    tool_calls = message.get("tool_calls", [])
+                if tools and message.tool_calls:
+                    tool_calls = [
+                        {
+                            "id": tc.id,
+                            "type": tc.type,
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in message.tool_calls
+                    ]
                     span.set_attribute("llm.finish_reason", "tool_calls")
                     span.set_attribute("llm.tool_calls_count", len(tool_calls))
                     return {
@@ -387,8 +397,8 @@ class LLMClient:
                         "usage": usage_dict,
                     }
 
-            except HTTPStatusError as e:
-                if e.response.status_code == 413:
+            except openai.APIStatusError as e:
+                if e.status_code == 413:
                     estimated_tokens = sum(len(m.get("content", "")) // 4 for m in msgs)
                     span.set_attribute("llm.payload_too_large", True)
                     span.set_attribute("llm.payload_token_estimate", estimated_tokens)
@@ -405,7 +415,7 @@ class LLMClient:
                     "llm_complete_error",
                     error=str(e),
                     error_type=type(e).__name__,
-                    status_code=e.response.status_code,
+                    status_code=e.status_code,
                     exc_info=True,
                 )
                 raise
@@ -429,7 +439,7 @@ class LLMClient:
         raise last_413 or Exception("All payload fallbacks exhausted")
 
     async def close(self) -> None:
-        await self._client.aclose()
+        await self._client.close()
 
 
 llm_client = LLMClient()
