@@ -101,8 +101,6 @@ jobs:
         include:
           - name: api
             dockerfile: docker/Dockerfile
-          - name: slack
-            dockerfile: docker/Dockerfile.slack
           - name: mcp
             dockerfile: docker/Dockerfile.mcp
           - name: migrations

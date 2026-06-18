@@ -2,7 +2,7 @@
 
 Built as both a daily tool and a portfolio project, Mimir is an exercise in designing AI systems that are actually trustworthy: explicit memory you can read and edit, human-in-the-loop for all writes, and an observability stack that tells you exactly what happened and why.
 
-Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cpp, Ollama) and layers a full assistant stack on top: persistent conversations, three-tier memory, a RAG pipeline over your personal documents, a Slack interface for natural interaction, and a tool-calling loop backed by an MCP server.
+Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cpp, Ollama) and layers a full assistant stack on top: persistent conversations, three-tier memory, a RAG pipeline over your personal documents, a web UI (React SPA) for natural interaction, and a tool-calling loop backed by an MCP server.
 
 ---
 
@@ -14,7 +14,7 @@ Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cp
 
 **Configurable backbone.** The model, embedding model, and database are all environment variables. Swapping from a 2B model on a laptop to a 26B model on a desktop is a one-line `.env` change.
 
-**Human-in-the-loop for writes.** Read operations are autonomous. Write operations to external systems go through an explicit Slack approval flow before anything executes. This constraint is designed to relax over time as trust is established, not before.
+**Human-in-the-loop for writes.** Read operations are autonomous. Write operations to external systems go through an explicit approval flow before anything executes. This constraint is designed to relax over time as trust is established, not before.
 
 ---
 
@@ -52,8 +52,8 @@ Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cp
               ┌─────────────┴─────────────┐
               │                           │
        ┌──────┴──────┐           ┌────────┴───────┐
-       │  Slack Bot  │           │  REST API /    │
-       │ (Socket Mode│           │  Ingest CLI    │
+       │  React SPA  │           │  REST API /    │
+       │ (WS + HTTP) │           │  Ingest CLI    │
        └─────────────┘           └────────────────┘
 ```
 
@@ -66,7 +66,7 @@ Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cp
 | **Proactive Scheduler**  | APScheduler jobs: episodic consolidation, morning brief, RSS digest                |
 | **MCP Server**           | FastMCP server exposing tools to the agent: search, calendar, Kubernetes, memory   |
 | **pgvector**             | Stores document chunk embeddings and episodic memory summaries                     |
-| **Slack Bot**            | Bolt for Python, Socket Mode. Translates Slack events to Agent Core API calls      |
+| **React SPA**            | Vite + Zustand frontend served by FastAPI. Talks to Agent Core over WebSocket/HTTP |
 
 ---
 
@@ -78,7 +78,7 @@ Mimir connects to any OpenAI-compatible local inference server (MLX-LM, llama.cp
 - **PostgreSQL + pgvector** — conversation history, document embeddings, episodic memories
 - **SQLAlchemy (async) + Alembic** — ORM and schema migrations
 - **APScheduler** — background scheduling for episodic consolidation, morning brief, RSS digest
-- **Slack Bolt** — Socket Mode bot interface
+- **React + Vite + Zustand** — single-page web UI, served as a static build by FastAPI
 - **httpx** — async HTTP client for LLM backend communication
 - **watchdog** — filesystem event monitoring for automatic document ingestion
 - **nomic-embed-text-v1.5** — local embedding model (768 dimensions), runs entirely in-process
@@ -144,29 +144,28 @@ The agent runs a multi-step tool loop against an MCP server running as a separat
 
 ### Write Approval Flow
 
-Any tool marked as destructive triggers a Slack approval message before executing. State machine: `PENDING → APPROVED/REJECTED/DISCUSSING → COMPLETED`.
+Any tool marked as destructive triggers an approval request in the web UI before executing. State machine: `PENDING → APPROVED/REJECTED/DISCUSSING → COMPLETED`.
 
 - 10-minute auto-reject timeout for `PENDING` (configurable `APPROVAL_TIMEOUT_MINUTES`)
-- Discussion mode: the user can refine an action in-thread before approving
+- Discussion mode: the user can refine an action before approving
 - Configurable timeout for `DISCUSSING` state (`APPROVAL_DISCUSS_TIMEOUT_HOURS`; 0 = no timeout)
 - After approval, the MCP tool is re-invoked with the authorised `action_id`; the LLM is optionally re-invoked with the tool result (`APPROVAL_REINVOKE_LLM`)
 
-### Slack Interface
+### Web UI
 
-Runs as a separate process via Socket Mode — no public inbound webhook or open port required.
+A React single-page app (Vite + Zustand + Tailwind/shadcn) is the primary interface. In production it is built to static assets and served directly by the FastAPI backend; during development the Vite dev server runs alongside the API.
 
-- Responds to direct messages
-- Responds to `@mentions` in channels, always in-thread
-- Responds to thread replies in threads where Mimir has already participated
-- Per-thread conversation isolation (`thread_ts` as the conversation key)
+- Streaming chat over a WebSocket (`/ws`) — thinking, tool calls, tool results, and approvals are pushed as typed events
+- Per-conversation isolation, persisted to PostgreSQL across restarts
+- Inline approval cards for destructive tool calls
 
 ### Morning Briefing
 
-A daily job (APScheduler, configurable hour via `MORNING_BRIEF_HOUR`) fetches today's calendar events from CalDAV and asks the LLM to generate a structured briefing, which is posted to a configured Slack channel (`MORNING_BRIEF_CHANNEL_ID`).
+A daily job (APScheduler, configurable hour via `MORNING_BRIEF_HOUR`) fetches today's calendar events from CalDAV and asks the LLM to generate a structured briefing, delivered as an ntfy push notification and available in the web UI.
 
 ### RSS News Digest
 
-Four times a day (08:00, 12:00, 16:00, 20:00 UTC) the scheduler fetches unread articles from a self-hosted [Miniflux](https://miniflux.app/) instance, asks the LLM to pick the most relevant ones based on your semantic memory and past feedback, and posts the selection as a threaded Slack message to a dedicated "newspaper" channel (`NEWSPAPER_CHANNEL_ID`).
+Four times a day (08:00, 12:00, 16:00, 20:00 UTC) the scheduler fetches unread articles from a self-hosted [Miniflux](https://miniflux.app/) instance, asks the LLM to pick the most relevant ones based on your semantic memory and past feedback, and delivers the selection as an ntfy push notification surfaced in the web UI.
 
 - **LLM-based filtering:** the model scores articles against your `memory.md` profile and a rolling feedback summary so picks improve over time
 - **Four windows:** overnight (20→08), morning (08→12), midday (12→16), afternoon (16→20)
@@ -182,7 +181,7 @@ Four times a day (08:00, 12:00, 16:00, 20:00 UTC) the scheduler fetches unread a
 - [`uv`](https://github.com/astral-sh/uv)
 - PostgreSQL with the [pgvector](https://github.com/pgvector/pgvector) extension
 - A running OpenAI-compatible inference server (MLX-LM, llama.cpp, Ollama, etc.)
-- A Slack app with Socket Mode enabled (for the bot interface)
+- Node.js (to build the React web UI)
 - (Optional) A self-hosted [SearXNG](https://searxng.github.io/searxng/) instance for web search
 - (Optional) A CalDAV server for calendar events and morning briefing
 - (Optional) A self-hosted [Miniflux](https://miniflux.app/) instance for the RSS digest
@@ -222,20 +221,24 @@ uv run alembic upgrade head
 **5. Start the API server**
 
 ```bash
-uv run fastapi dev mimir/main.py
+uv run fastapi dev agent_core/main.py --port 8000
 ```
 
 **6. Start the MCP server** (separate terminal)
 
 ```bash
-uv run python -m mimir.mcp.server
+uv run python -m mcp_server.server
 ```
 
-**7. Start the Slack bot** (separate terminal)
+**7. Start the web UI** (separate terminal, for frontend development)
 
 ```bash
-uv run python -m mimir.interfaces.slack.bot
+cd agent_ui
+npm install
+npm run dev      # Vite dev server on :5173, proxies /api and /ws to :8000
 ```
+
+For a production-style run, build the SPA (`npm run build`) — the FastAPI server then serves `agent_ui/dist/` directly, so only steps 5 and 6 are needed.
 
 **8. (Optional) Ingest documents**
 
@@ -247,7 +250,7 @@ uv run python scripts/ingest.py --path ./vault
 
 ### Docker Compose
 
-The included `docker-compose.yml` runs the full stack: API server, MCP server, Slack bot, and PostgreSQL with pgvector.
+The included `docker-compose.yml` runs the full stack: API server (which serves the web UI), MCP server, and PostgreSQL with pgvector.
 
 ```bash
 # Run migrations first
@@ -284,17 +287,8 @@ All settings are loaded from `.env` via Pydantic Settings. The MCP server reads 
 | `SEMANTIC_MEMORY_PATH` | `vault/memory.md`                                             | Path to the semantic memory file       |
 | `VAULT_PATH`           | `vault`                                                       | Root directory watched for documents   |
 | `DATABASE_URL`         | `postgresql+asyncpg://postgres:postgres@localhost:5432/mimir` | Async PostgreSQL connection string     |
-| `AGENT_URL`            | `http://127.0.0.1:8000`                                       | Agent Core URL (used by the Slack bot) |
+| `AGENT_URL`            | `http://127.0.0.1:8000`                                       | Agent Core URL (internal agent-to-agent calls) |
 | `ENV`                  | `development`                                                 | Set to `production` for JSON logging   |
-
-### Slack
-
-| Variable              | Default      | Description                                         |
-| --------------------- | ------------ | --------------------------------------------------- |
-| `SLACK_BOT_TOKEN`     | _(required)_ | Slack bot OAuth token                               |
-| `SLACK_APP_TOKEN`     | _(required)_ | Slack app-level token (Socket Mode)                 |
-| `SLACK_DM_CHANNEL_ID` | _(empty)_    | DM channel ID between bot and owner (for approvals) |
-| `SLACK_USER_ID`       | _(empty)_    | Owner's Slack user ID (used in morning brief)       |
 
 ### Memory & Context
 
@@ -333,9 +327,7 @@ All settings are loaded from `.env` via Pydantic Settings. The MCP server reads 
 | `CALDAV_URL`               | _(none)_ | CalDAV server URL (morning brief + calendar MCP tool) |
 | `CALDAV_USERNAME`          | _(none)_ | CalDAV username                                       |
 | `CALDAV_PASSWORD`          | _(none)_ | CalDAV password                                       |
-| `MORNING_BRIEF_CHANNEL_ID` | _(none)_ | Slack channel for the morning briefing                |
-| `MORNING_BRIEF_HOUR`       | `7`      | UTC hour to post the morning briefing                 |
-| `NEWSPAPER_CHANNEL_ID`     | _(none)_ | Slack channel for the RSS digest                      |
+| `MORNING_BRIEF_HOUR`       | `7`      | UTC hour to generate the morning briefing             |
 | `MINIFLUX_URL`             | _(none)_ | Miniflux instance URL                                 |
 | `MINIFLUX_USERNAME`        | _(none)_ | Miniflux username                                     |
 | `MINIFLUX_PASSWORD`        | _(none)_ | Miniflux password                                     |
@@ -358,7 +350,7 @@ All settings are loaded from `.env` via Pydantic Settings. The MCP server reads 
 | `GET`   | `/api/conversations`      | List all conversations, ordered by last active |
 | `GET`   | `/api/conversations/{id}` | Paginated message history for a conversation   |
 | `POST`  | `/api/ingest`             | Upload a Markdown or PDF file for RAG indexing |
-| `GET`   | `/api/approvals`          | List pending actions (filterable by Slack ts)  |
+| `GET`   | `/api/approvals`          | List pending actions (filterable by message/thread ts) |
 | `GET`   | `/api/approvals/{id}`     | Get a specific pending action                  |
 | `POST`  | `/api/approvals`          | Create a pending action                        |
 | `PATCH` | `/api/approvals/{id}`     | Update a pending action's status               |
@@ -416,16 +408,16 @@ The project is developed in phases. Current status: **Phase 2 complete, Phase 3 
 
 ### Phase 2 — Complete
 
-- ✅ Slack bot — DMs, @mentions, thread replies, per-thread conversation isolation
+- ✅ Web UI — React SPA over WebSocket, streaming responses, per-conversation isolation
 - ✅ Conversation persistence — PostgreSQL-backed, survives process restarts, Alembic migrations
 - ✅ RAG pipeline — Markdown and PDF ingestion, file watcher, upload endpoint, cosine retrieval
 - ✅ Episodic memory — automatic post-conversation summarisation, vector storage, retrieval, re-consolidation
 - ✅ Token budget management — per-component caps, dynamic conversation window, 413 fallback chain
 - ✅ MCP server + tool calling loop — multi-step loop, schema caching, write detection
-- ✅ Write approval flow — Slack-gated state machine, discussion mode, auto-timeout
+- ✅ Write approval flow — approval-gated state machine, discussion mode, auto-timeout
 - ✅ Web search — SearXNG integration via MCP tool
 - ✅ Calendar integration — CalDAV client, MCP tool, injected into morning brief
-- ✅ Morning briefing — daily LLM-generated brief with today's calendar, posted to Slack
+- ✅ Morning briefing — daily LLM-generated brief with today's calendar, delivered via push notification
 - ✅ RSS news digest — Miniflux + LLM filtering, four digest windows per day, feedback loop
 - ✅ Kubernetes tools — read-only cluster inspection (pods, deployments, services, nodes, logs)
 
@@ -433,11 +425,11 @@ The project is developed in phases. Current status: **Phase 2 complete, Phase 3 
 
 **Distributed tracing and quality tracking.** To answer basic operation questions (How often do tool calls fail? Is retrieval quality improving or degrading over time? Are the RAG chunks actually being used in responses?) the system requires observability. Using Grafana-OTel stack (Alloy, Tempo, Prometheus and Loki) will provide a deep understanding on how the system behaves and makes finding bugs and issues easier. Custom metric collection, user feedback for response quality, usage patterns, RAG retrieval and memory relevance heuristics, will help calibrating the different parameters and prompts for the agent.
 
-**Conversation-aware memory writes.** After each conversation ends, the consolidation job runs a second LLM pass to extract durable facts — life changes, new preferences, project decisions — and proposes them as additions to `memory.md` via the same Slack approval flow. This bridges the gap between episodic summaries (narratives) and semantic memory (actionable facts). The extraction prompt distinguishes between durable facts worth persisting and transient details that belong only in episodic summaries.
+**Conversation-aware memory writes.** After each conversation ends, the consolidation job runs a second LLM pass to extract durable facts — life changes, new preferences, project decisions — and proposes them as additions to `memory.md` via the same approval flow. This bridges the gap between episodic summaries (narratives) and semantic memory (actionable facts). The extraction prompt distinguishes between durable facts worth persisting and transient details that belong only in episodic summaries.
 
 **Hybrid RAG with BM25 + reranking.** Pure vector similarity has known blind spots: it handles semantic paraphrases well but fumbles on exact terms, proper nouns, error codes, and config key references. Adding PostgreSQL's native `tsvector` full-text search as a second retrieval path (no new infrastructure) and merging the two result sets via Reciprocal Rank Fusion covers both failure modes. A later upgrade path to a lightweight cross-encoder reranker for higher-quality merging.
 
-**Self-evaluation and quality tracking.** Structured instrumentation to measure whether the system is actually getting better or worse over time: thumbs-up/down reactions on Slack responses stored to a ratings table, RAG retrieval relevance tracking (which chunks were injected vs. actually referenced in the response), memory suggestion acceptance rate, and tool call success rate. Surfaced as a Grafana dashboard. Enables data-driven decisions about what to improve next rather than subjective impression.
+**Self-evaluation and quality tracking.** Structured instrumentation to measure whether the system is actually getting better or worse over time: thumbs-up/down reactions on responses stored to a ratings table, RAG retrieval relevance tracking (which chunks were injected vs. actually referenced in the response), memory suggestion acceptance rate, and tool call success rate. Surfaced as a Grafana dashboard. Enables data-driven decisions about what to improve next rather than subjective impression.
 
 **Three-tier test suite.** Full implementation of the testing strategy described above: deterministic unit/integration tests with mocked LLM, contract tests verifying structural model behaviour, and an LLM-as-judge eval harness with persistent result tracking for regression detection across model upgrades and prompt changes.
 

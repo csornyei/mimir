@@ -3,7 +3,6 @@ from collections import Counter
 from sqlalchemy import select
 
 from shared.db import get_session
-from shared.logger import logger
 from shared.models import RssDigestEntry
 
 
@@ -40,16 +39,3 @@ async def summarise_feedback() -> str:
         lines.append(f"Sources you prefer: {top}.")
 
     return " ".join(lines)
-
-
-async def record_reaction(message_ts: str, reaction: str) -> None:
-    async with get_session() as session:
-        result = await session.execute(
-            select(RssDigestEntry).where(RssDigestEntry.slack_message_ts == message_ts)
-        )
-        entry = result.scalar_one_or_none()
-        if entry is None:
-            logger.debug("record_reaction_no_match", message_ts=message_ts)
-            return
-        entry.reaction = reaction
-        logger.debug("record_reaction_saved", message_ts=message_ts, reaction=reaction)

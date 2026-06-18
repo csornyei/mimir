@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent_core.agent.approval import store
@@ -16,18 +15,6 @@ from shared.schemas import (
 )
 
 router = APIRouter()
-
-
-class ApprovalReactionBody(BaseModel):
-    message_ts: str
-    reaction: str
-    user_id: str
-
-
-class ApprovalReplyBody(BaseModel):
-    thread_ts: str
-    text: str
-    user_id: str
 
 
 @router.get("/approvals", response_model=list[PendingActionResponse])
@@ -58,34 +45,6 @@ async def create_approval(
         parent_id=body.parent_id,
     )
     return PendingActionResponse.model_validate(action)
-
-
-# Static sub-paths must be registered before {action_id} to avoid shadowing
-@router.post("/approvals/reaction")
-async def handle_approval_reaction(
-    body: ApprovalReactionBody,
-    session: AsyncSession = Depends(get_db),
-) -> dict:
-    from agent_core.agent.approval import manager
-
-    await manager.handle_reaction(session, body.reaction, body.message_ts, body.user_id)
-    return {}
-
-
-@router.post("/approvals/reply")
-async def handle_approval_reply(
-    body: ApprovalReplyBody,
-    session: AsyncSession = Depends(get_db),
-) -> dict:
-    from agent_core.agent.approval import manager
-
-    consumed, reply = await manager.handle_thread_reply(
-        session,
-        thread_ts=body.thread_ts,
-        text=body.text,
-        user_id=body.user_id,
-    )
-    return {"consumed": consumed, "reply": reply}
 
 
 @router.get("/approvals/{action_id}", response_model=PendingActionResponse)

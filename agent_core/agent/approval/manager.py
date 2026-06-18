@@ -11,21 +11,12 @@ from shared.models import ActionStatus, PendingActionModel
 from agent_core.agent import client as agent_client
 from agent_core.config import agent_config
 from shared.logger import logger
-from shared.const import APPROVE_EMOJI_NAMES, REJECT_EMOJI_NAMES
 
 _tracer = trace.get_tracer("mimir.agent.approval.manager")
 
 
 def _get_web_conversation_id(action: PendingActionModel) -> str | None:
     return action.payload.get("web_conversation_id")
-
-
-def _format_approval_message(payload: dict) -> str:
-    description = payload.get("description", "perform an action")
-    return (
-        f"I'd like to {description}.\n\n"
-        "✅ to go ahead · ❌ to cancel · or reply here to discuss"
-    )
 
 
 async def request_approval(
@@ -52,7 +43,7 @@ async def request_approval(
         action = await store.create(
             session,
             payload=payload,
-            channel_id=agent_config.slack_dm_channel_id,
+            channel_id="web",
             message_ts=message_ts,
             triggered_by=triggered_by,
             timeout_at=timeout_at,
@@ -66,35 +57,6 @@ async def request_approval(
             message_ts=message_ts,
         )
         return action
-
-
-async def handle_reaction(
-    session: AsyncSession,
-    emoji: str,
-    message_ts: str,
-    user_id: str,
-) -> None:
-    """Process a reaction on an approval message. emoji must already be base-stripped."""
-    action = await store.get_by_message_ts(session, message_ts)
-    if action is None:
-        return
-
-    terminal = {ActionStatus.completed, ActionStatus.rejected}
-    if action.status in terminal:
-        logger.debug(
-            "approval_reaction_ignored_terminal",
-            action_id=str(action.id),
-            status=action.status,
-            emoji=emoji,
-        )
-        return
-
-    if emoji in APPROVE_EMOJI_NAMES:
-        await _handle_approve(session, action, user_id)
-    elif emoji in REJECT_EMOJI_NAMES:
-        await _handle_reject(session, action)
-    else:
-        logger.debug("approval_unknown_emoji", emoji=emoji, action_id=str(action.id))
 
 
 async def _handle_approve(
@@ -199,50 +161,6 @@ async def _handle_reject(session: AsyncSession, action: PendingActionModel) -> N
             },
         )
     logger.info("approval_rejected", action_id=str(action.id))
-
-
-async def handle_thread_reply(
-    session: AsyncSession,
-    thread_ts: str,
-    text: str,
-    user_id: str,
-) -> tuple[bool, str | None]:
-    """Handle a user reply in an approval thread.
-
-    Returns (consumed, reply_text). consumed=True if this thread belongs to an
-    approval; reply_text is the LLM response to post, or None if nothing to post.
-    """
-    action = await store.get_by_thread_ts(session, thread_ts)
-    if action is None:
-        return False, None
-
-    terminal = {ActionStatus.completed, ActionStatus.rejected}
-    if action.status in terminal:
-        return False, None
-
-    if action.status == ActionStatus.pending:
-        await store.set_discussing(session, action.id, thread_ts)
-
-    description = action.payload.get("description", "the proposed action")
-    enriched = f"[Re: proposed action — {description}] {text}"
-
-    try:
-        reply = await agent_client.send_to_agent(
-            conversation_id=f"{action.channel_id}|{thread_ts}",
-            user_id=user_id,
-            message=enriched,
-        )
-        return True, reply
-    except Exception as e:
-        logger.error(
-            "approval_discuss_failed",
-            action_id=str(action.id),
-            tool_name=action.payload.get("tool_name", "unknown"),
-            error=str(e),
-            error_type=type(e).__name__,
-            exc_info=True,
-        )
-        return True, "Sorry, something went wrong while processing your reply."
 
 
 async def approve_action(

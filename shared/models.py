@@ -185,16 +185,12 @@ class RssDigestEntry(Base):
         DateTime(timezone=True), nullable=False
     )
     window: Mapped[str] = mapped_column(String(10), nullable=False)
-    slack_channel_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    slack_message_ts: Mapped[str | None] = mapped_column(String, nullable=True)
     reaction: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     interesting_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    __table_args__ = (Index("ix_rss_digest_entries_message_ts", "slack_message_ts"),)
 
 
 class HealthSnapshot(Base):

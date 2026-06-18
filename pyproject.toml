@@ -34,7 +34,6 @@ agent = [
     "opentelemetry-instrumentation-fastapi>=0.62b0",
     "pyaml>=26.2.1",
     "pymupdf>=1.27.2.2",
-    "slack-bolt>=1.27.0",
     "watchdog>=6.0.0",
 ]
 
@@ -45,8 +44,6 @@ mcp = [
 ]
 
 migrations = ["alembic>=1.18.4"]
-
-slack = ["slack-bolt>=1.27.0"]
 
 dev = [
     "pre-commit>=4.5.1",

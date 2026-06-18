@@ -35,23 +35,6 @@ services:
       - ${VAULT_PATH:-./vault}:/vault
     restart: unless-stopped
 
-  mimir-slack:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.slack
-    command: uv run python -m slackbot.bot
-    env_file: .env
-    environment:
-      AGENT_URL: http://mimir-api:8000
-      ENV: production
-      SERVICE_NAME: slack_interface
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://alloy:4317
-    profiles:
-      - agent
-    depends_on:
-      - mimir-api
-    restart: unless-stopped
-
   mimir-mcp:
     build:
       context: .

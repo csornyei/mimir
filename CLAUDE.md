@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Mimir** is a self-hosted, privacy-first personal AI assistant. All inference runs locally on your hardware. The system combines a FastAPI backend with a Slack interface, persistent conversation storage, a three-tier memory architecture, and a RAG pipeline over personal documents.
+**Mimir** is a self-hosted, privacy-first personal AI assistant. All inference runs locally on your hardware. The system combines a FastAPI backend with a React web UI, persistent conversation storage, a three-tier memory architecture, and a RAG pipeline over personal documents.
 
 **Current Phase:** Phase 3 (starting). Phase 2 is complete. Active work: distributed tracing/observability, conversation-aware memory writes, hybrid RAG.
 
-The primary user interface is now a React SPA (`agent_ui/`) served directly by the FastAPI backend. Slack remains a secondary interface.
+The user interface is a React SPA (`agent_ui/`) served directly by the FastAPI backend, communicating over WebSocket and HTTP.
 
 ---
 
@@ -37,13 +37,13 @@ The primary user interface is now a React SPA (`agent_ui/`) served directly by t
 │                     └──────────────────────────────────┘     │
 └──────────────────────────────────────────────────────────────┘
                             │
-          ┌─────────────────┼──────────────────┐
-          │                 │                  │
-   ┌──────┴──────┐  ┌───────┴──────┐  ┌────────┴───────┐
-   │  Slack Bot  │  │  React SPA   │  │  REST API /    │
-   │  slackbot/  │  │  agent_ui/   │  │  Ingest CLI    │
-   └─────────────┘  │  (WS + HTTP) │  └────────────────┘
-                    └──────────────┘
+                   ┌──────────────────┴──────────────────┐
+                   │                                     │
+            ┌──────┴───────┐                    ┌────────┴───────┐
+            │  React SPA   │                    │  REST API /    │
+            │  agent_ui/   │                    │  Ingest CLI    │
+            │  (WS + HTTP) │                    └────────────────┘
+            └──────────────┘
 ```
 
 ### Top-level packages
@@ -53,7 +53,6 @@ The primary user interface is now a React SPA (`agent_ui/`) served directly by t
 | `agent_core/` | FastAPI service. Conversation state, memory assembly, LLM dispatch, RAG, scheduling        |
 | `agent_ui/`   | React SPA (Vite + Zustand + Tailwind/shadcn). Built artifact is served by FastAPI.         |
 | `mcp_server/` | FastMCP service (port 8010). Exposes tools to the agent: search, calendar, k8s, memory     |
-| `slackbot/`   | Slack Bolt app, Socket Mode. Translates Slack events to Agent Core HTTP calls              |
 | `shared/`     | Cross-package code: ORM models, DB session, config base class, schemas, telemetry, logging |
 | `web_fetch/`  | Standalone web fetcher service                                                             |
 | `migrations/` | Alembic migrations (source of truth for DB schema)                                         |
@@ -86,7 +85,6 @@ uv run alembic upgrade head      # Apply all migrations
 ```bash
 make api      # FastAPI agent core on :8000
 make mcp      # MCP server on :8010
-make slack    # Slack bot (also scales down the k8s deployment and restores on exit)
 make gemma    # Start local LLM via llama-server
 ```
 
@@ -94,7 +92,6 @@ Or directly:
 ```bash
 uv run fastapi dev agent_core/main.py --port 8000
 uv run python -m mcp_server.server
-uv run python -m slackbot.bot
 uv run python scripts/ingest.py --path ./vault   # Bulk ingest
 ```
 
@@ -164,9 +161,9 @@ Two decorators in `mcp_server/decorators.py`:
 
 ### WebSocket Interface (`agent_core/ws/`, `/ws`)
 
-The React SPA communicates exclusively over WebSocket. The `/ws` endpoint in `agent_core/main.py` is the entry point. `ws/registry.py` holds a per-conversation `WSSender` map so that approval callbacks and scheduler jobs can push events to the correct connection. `ws/handlers/chat.py` drives the full streaming tool loop and emits typed events (`thinking`, `tool_call`, `tool_result`, `approval_required`, `done`, etc.) defined in `shared/schemas.py` (`WSChatRequest`, `ServerEvent`). The Slack bot uses the REST `POST /api/chat` endpoint instead.
+The React SPA communicates exclusively over WebSocket. The `/ws` endpoint in `agent_core/main.py` is the entry point. `ws/registry.py` holds a per-conversation `WSSender` map so that approval callbacks and scheduler jobs can push events to the correct connection. `ws/handlers/chat.py` drives the full streaming tool loop and emits typed events (`thinking`, `tool_call`, `tool_result`, `approval_required`, `done`, etc.) defined in `shared/schemas.py` (`WSChatRequest`, `ServerEvent`). A REST `POST /api/chat` endpoint also exists, used internally by `agent_core/agent/client.py` (e.g. LLM re-invocation after approval).
 
-### Write Approval Flow (`agent_core/agent/approval/`, `slackbot/approval.py`)
+### Write Approval Flow (`agent_core/agent/approval/`)
 
 When the agent detects a tool call with `destructiveHint=True`, it routes through the approval state machine instead of executing directly. State: `PENDING → APPROVED/REJECTED/DISCUSSING → COMPLETED/FAILED`.
 
@@ -182,7 +179,7 @@ When the agent detects a tool call with `destructiveHint=True`, it routes throug
 
 ### Conversation Isolation
 
-Conversations are keyed by `{channel_id}|{thread_ts}` in Slack. DMs use message `ts` as the thread suffix. This persists conversations across process restarts.
+Conversations are keyed by a `{channel_id}|{thread_ts}` style identifier and persisted to PostgreSQL, so they survive process restarts. The web UI uses a per-conversation id assigned by the SPA.
 
 ### Push Notifications (`shared/external/ntfy.py`)
 
@@ -224,7 +221,6 @@ Structured logging via `structlog` (`shared/logger.py`). OpenTelemetry tracing v
 ## Important Gotchas
 
 - **Async everywhere:** All DB calls, HTTP calls, and scheduler jobs are async.
-- **Socket Mode:** Slack bot uses Socket Mode — no public inbound webhook, no open port.
 - **Config at import time:** Env vars must be set before any mimir module import. See `tests/conftest.py`.
 - **MCP tool registration is via side-effects:** Tools only exist if their module is imported in `mcp_server/server.py`.
 - **`write_tool` injects `action_id`:** The decorator modifies the function signature; MCP callers must pass `action_id` as a kwarg pointing to an approved `PendingAction` UUID.
@@ -239,6 +235,6 @@ Structured logging via `structlog` (`shared/logger.py`). OpenTelemetry tracing v
 - **System prompt assembly:** `agent_core/llm/messages.py` + `agent_core/prompts/system.py`
 - **MCP tool decorators:** `mcp_server/decorators.py`
 - **Approval flow entry:** `agent_core/agent/approval/manager.py`
-- **REST chat flow (Slack):** `agent_core/routes/chat.py` → `agent_core/agent/llm_dispatch.py` → `agent_core/agent/tools.py`
+- **REST chat flow (internal):** `agent_core/routes/chat.py` → `agent_core/agent/llm_dispatch.py` → `agent_core/agent/tools.py`
 - **WS chat flow (SPA):** `agent_core/ws/router.py` → `agent_core/ws/handlers/chat.py` → `agent_core/agent/tools.py`
 - **WebSocket event types:** `shared/schemas.py` (`WSChatRequest`, `LLMSettings`) + `agent_ui/src/types/index.ts` (`ServerEvent`, `ClientEvent`)

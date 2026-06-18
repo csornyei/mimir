@@ -1,4 +1,3 @@
-from functools import wraps
 from typing import Sequence
 
 from opentelemetry import trace
@@ -58,35 +57,6 @@ def setup_tracing(service_name: str, service_version: str = "0.1.0") -> None:
     trace.set_tracer_provider(provider)
 
     HTTPXClientInstrumentor().instrument()
-
-
-_tracer = trace.get_tracer(__name__)
-
-
-def slack_span(event_type: str):
-
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            with _tracer.start_as_current_span(
-                f"slack.{event_type}",
-                kind=trace.SpanKind.SERVER,
-            ) as span:
-                payload = kwargs.get("event") or kwargs.get("message") or {}
-                if isinstance(payload, dict):
-                    for key, attr in (
-                        ("user", "slack.user_id"),
-                        ("channel", "slack.channel_id"),
-                        ("thread_ts", "slack.thread_ts"),
-                        ("ts", "slack.event_ts"),
-                    ):
-                        if key in payload:
-                            span.set_attribute(attr, payload[key])
-                return await func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
 
 
 def instrument_sqlalchemy(engine) -> None:

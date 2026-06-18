@@ -45,13 +45,6 @@ class AgentConfig(SharedConfig):
     rss_digest_min_entries: int = 10
     rss_digest_picks: int = 10
 
-    # Slack credentials used by agent_core scheduler and approval manager
-    slack_bot_token: str = ""
-    slack_dm_channel_id: str = ""
-    slack_user_id: str = ""
-    morning_brief_channel_id: str | None = None
-    newspaper_channel_id: str | None = None
-
     llm_scheduler_model: str | None = None
 
 
