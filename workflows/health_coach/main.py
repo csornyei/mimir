@@ -55,10 +55,10 @@ async def fetch_fitness_data(endpoint_url: str, summary_type: str) -> str:
                 params={"end_date": today, "summary_type": summary_type},
             )
         response.raise_for_status()
-    try:
-        return json.dumps(response.json(), indent=2, ensure_ascii=False)
-    except json.JSONDecodeError:
-        return response.text
+        try:
+            return json.dumps(response.json(), indent=2, ensure_ascii=False)
+        except json.JSONDecodeError:
+            return response.text
 
 
 def _build_messages(template: str, data: str) -> list[dict[str, str]]:
@@ -96,8 +96,12 @@ async def run_health_coach() -> None:
     assert config.health_coach_endpoint_url is not None
     assert config.agent_core_api_url is not None
 
-    coaching_type = None
-    if not config.health_coach_type or config.health_coach_type not in COACH_TYPES:
+    if config.health_coach_type not in COACH_TYPES:
+        logger.warning(
+            "health_coach_unknown_type",
+            configured=config.health_coach_type,
+            fallback="week",
+        )
         coaching_type = COACH_TYPES["week"]
     else:
         coaching_type = COACH_TYPES[config.health_coach_type]

@@ -13,6 +13,10 @@ class FileApiClient:
     def __init__(self, base_url: str) -> None:
         self._base_url = base_url.rstrip("/")
 
+    @staticmethod
+    def _normalise_path(path: str) -> str:
+        return path.removeprefix("vault/")
+
     async def list_files(self, path: str = "", type: str = "files_all") -> list[str]:
         async with httpx.AsyncClient(base_url=self._base_url) as client:
             response = await client.get(
@@ -24,6 +28,7 @@ class FileApiClient:
 
     async def read_file(self, path: str) -> str:
         """Return the text content of a vault file. Returns '' if the file doesn't exist."""
+        path = self._normalise_path(path)
         async with httpx.AsyncClient(base_url=self._base_url) as client:
             response = await client.get(
                 "/v1/files/read", params={"path": path, "content": "text"}
@@ -54,6 +59,7 @@ class FileApiClient:
 
     async def save_file(self, path: str, content: str) -> None:
         """Write content to a file, creating it if it doesn't exist."""
+        path = self._normalise_path(path)
         lines = content.splitlines()
         try:
             await self._update_file(path, lines)
@@ -71,6 +77,7 @@ class FileApiClient:
 
     async def append_line(self, path: str, line: str) -> None:
         """Append a single line to the end of a file's content."""
+        path = self._normalise_path(path)
         current = await self.read_file(path)
         updated = f"{current}\n{line}" if current else line
         await self.save_file(path, updated)

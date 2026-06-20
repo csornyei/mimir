@@ -4,18 +4,12 @@ from agent_core.config import agent_config
 from shared.file_api import get_file_api_client
 
 
-def _vault_relative(path: str) -> str:
-    return path.removeprefix("vault/")
-
-
 class SemanticMemory:
     """Reads and writes the semantic memory file via the File API."""
 
     def __init__(self, vault_path: str | None = None) -> None:
         self._vault_path: str = (
-            vault_path
-            if vault_path is not None
-            else _vault_relative(agent_config.semantic_memory_path)
+            vault_path if vault_path is not None else agent_config.semantic_memory_path
         )
 
     async def read(self) -> str:

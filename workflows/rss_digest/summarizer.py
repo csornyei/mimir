@@ -31,8 +31,7 @@ def validate_config() -> bool:
 
 
 async def _load_semantic_memory() -> str:
-    vault_path = config.semantic_memory_path.removeprefix("vault/")
-    return await get_file_api_client().read_file(vault_path)
+    return await get_file_api_client().read_file(config.semantic_memory_path)
 
 
 def _extract_json_object(content: str) -> dict[str, Any] | None:

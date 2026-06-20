@@ -5,6 +5,7 @@ from datetime import date
 import httpx
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
+from sqlalchemy import select
 
 from shared.db import dispose_db, get_session, initialize_db
 from shared.file_api import get_file_api_client
@@ -23,6 +24,7 @@ def validate_config() -> bool:
     required = [
         ("agent_core_api_url", config.agent_core_api_url),
         ("database_url", config.database_url),
+        ("file_api_url", config.file_api_url),
     ]
     missing = [name for name, value in required if not value]
     if missing:
@@ -35,8 +37,6 @@ def validate_config() -> bool:
 
 
 async def get_analysis(week_start: date) -> HealthAnalysis | None:
-    from sqlalchemy import select
-
     async with get_session() as session:
         result = await session.execute(
             select(HealthAnalysis).where(HealthAnalysis.week_start == week_start)
@@ -75,14 +75,12 @@ async def call_llm(week_start: date, analysis_md: str) -> str:
             response = await client.post("/api/raw", json=payload.model_dump())
             response.raise_for_status()
     body = response.json()
-    logger.info("llm_response", body)
-    return response.json().get("content", "")  # type: ignore[no-any-return]
+    logger.info("llm_response", body=body)
+    return body.get("content", "")  # type: ignore[no-any-return]
 
 
 async def write_memory_file(content: str) -> None:
-    vault_path = config.health_memory_file_path.removeprefix("vault/")
-
-    await get_file_api_client().save_file(vault_path, content)
+    await get_file_api_client().save_file(config.health_memory_file_path, content)
 
 
 async def run(week_start: date) -> None:

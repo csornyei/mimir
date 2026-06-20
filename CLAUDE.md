@@ -115,10 +115,6 @@ uv run pytest tests/unit -v        # Unit tests only
 uv run pytest -k test_name         # Single test
 uv run pytest --cov                # With coverage
 
-uv run ruff check .                # Lint
-uv run ruff format .               # Format
-uv run ty check                    # Type check
-
 uv run pre-commit run --all-files  # All pre-commit hooks
 ```
 

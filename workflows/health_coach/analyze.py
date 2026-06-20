@@ -117,21 +117,24 @@ def compute_deltas(
     }
 
 
-async def fetch_health_data(week_start: date) -> dict[str, Any]:
+async def fetch_health_data(
+    week_start: date, summary_type: str = "week"
+) -> dict[str, Any]:
     week_end = week_start + timedelta(days=6)
     with _tracer.start_as_current_span(
         "fetch_health_data", kind=SpanKind.CLIENT
     ) as span:
         span.set_attribute("week_start", str(week_start))
         span.set_attribute("week_end", str(week_end))
+        span.set_attribute("summary_type", summary_type)
         assert config.health_coach_endpoint_url is not None
         url = f"{config.health_coach_endpoint_url}/api/v1/health/summary"
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(
-                url, params={"end_date": str(week_end), "summary_type": "week"}
+                url, params={"end_date": str(week_end), "summary_type": summary_type}
             )
         response.raise_for_status()
-    return response.json()  # type: ignore[no-any-return]
+        return response.json()  # type: ignore[no-any-return]
 
 
 async def upsert_snapshot(
@@ -153,10 +156,10 @@ async def upsert_snapshot(
 async def get_historical(
     session: AsyncSession, week_start: date
 ) -> tuple[list[HealthSnapshot], HealthSnapshot | None]:
-    four_weeks_ago = week_start - timedelta(weeks=3)
+    rolling_window_start = week_start - timedelta(weeks=3)
     recent_rows = await session.execute(
         select(HealthSnapshot)
-        .where(HealthSnapshot.week_start >= four_weeks_ago)
+        .where(HealthSnapshot.week_start >= rolling_window_start)
         .where(HealthSnapshot.week_start <= week_start)
         .order_by(HealthSnapshot.week_start)
     )
@@ -243,7 +246,7 @@ async def run(week_start: date) -> None:
         span.set_attribute("week_start", str(week_start))
 
         with _tracer.start_as_current_span("fetch_and_store_snapshot"):
-            raw_data = await fetch_health_data(week_start)
+            raw_data = await fetch_health_data(week_start, summary_type="week")
             async with get_session() as session:
                 await upsert_snapshot(session, week_start, raw_data)
 
@@ -256,6 +259,13 @@ async def run(week_start: date) -> None:
         if not recent_weeks:
             logger.error("health_analyze_no_history", week_start=str(week_start))
             return
+
+        if len(recent_weeks) == 1:
+            logger.info(
+                "health_analyze_first_run",
+                week_start=str(week_start),
+                note="no prior week snapshot; week_over_week deltas will be null",
+            )
 
         deltas = compute_deltas(recent_weeks, three_months_ago)
         workouts: list[dict[str, Any]] = (
