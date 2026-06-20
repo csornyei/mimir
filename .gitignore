@@ -218,3 +218,4 @@ scratch/
 .DS_Store
 
 !agent_ui/src/lib
+vault
