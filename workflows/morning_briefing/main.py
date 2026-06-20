@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 from zoneinfo import ZoneInfo
@@ -26,50 +26,24 @@ _VALID_MODES: frozenset[str] = frozenset({"precise", "balanced", "creative", "fa
 
 
 def validate_config() -> bool:
-    required_fields = [
-        # TimeZone
-        job_config.timezone,
-        # CalDAV credentials
-        job_config.caldav_url,
-        job_config.caldav_username,
-        job_config.caldav_password,
-        # Weather configuration
-        job_config.weather_config_path,
-        # LLM models
-        job_config.llm_model,
-        job_config.llm_presets_path,
-        # Notification configuration
-        job_config.ntfy_url,
-        job_config.ntfy_morning_brief_topic,
-        job_config.mimir_host,
-        # Agent Core API
-        job_config.agent_core_api_url,
-    ]
-
-    if not all(required_fields):
-        missing_fields = [
-            field_name
-            for field_name, value in zip(
-                [
-                    "timezone",
-                    "caldav_url",
-                    "caldav_username",
-                    "caldav_password",
-                    "weather_config_path",
-                    "llm_model",
-                    "llm_presets_path",
-                    "ntfy_url",
-                    "ntfy_morning_brief_topic",
-                    "mimir_host",
-                    "agent_core_api_url",
-                ],
-                required_fields,
-            )
-            if not value
-        ]
+    required: dict[str, object] = {
+        "timezone": job_config.timezone,
+        "caldav_url": job_config.caldav_url,
+        "caldav_username": job_config.caldav_username,
+        "caldav_password": job_config.caldav_password,
+        "weather_config_path": job_config.weather_config_path,
+        "llm_model": job_config.llm_model,
+        "llm_presets_path": job_config.llm_presets_path,
+        "ntfy_url": job_config.ntfy_url,
+        "ntfy_morning_brief_topic": job_config.ntfy_morning_brief_topic,
+        "mimir_host": job_config.mimir_host,
+        "agent_core_api_url": job_config.agent_core_api_url,
+    }
+    missing = [k for k, v in required.items() if not v]
+    if missing:
         logger.warning(
             "morning_briefing_skipped",
-            reason=f"Missing required config fields: {', '.join(missing_fields)}",
+            reason=f"Missing required config fields: {', '.join(missing)}",
         )
         return False
     return True
@@ -132,19 +106,32 @@ async def get_weather() -> dict[str, Any]:
 def prepare_llm_settings() -> LLMSettings:
     presets = yaml.safe_load(Path(job_config.llm_presets_path).read_text())
 
-    default_preset = presets.get("default_preset", "balanced")
+    if not isinstance(presets, dict):
+        raise ValueError(
+            f"Presets file {job_config.llm_presets_path} is empty or not a YAML mapping"
+        )
 
     if "presets" not in presets:
-        logger.error(
-            "morning_briefing_failed",
-            error=f"No presets found in {job_config.llm_presets_path}",
-        )
         raise ValueError(f"No presets found in {job_config.llm_presets_path}")
 
     available_presets: dict[str, Any] = presets["presets"]
+    default_preset = presets.get("default_preset", "balanced")
     preset_name = "fast" if "fast" in available_presets else default_preset
+
+    if preset_name not in available_presets:
+        raise ValueError(
+            f"Preset '{preset_name}' not found in {job_config.llm_presets_path}."
+            f" Available: {list(available_presets)}"
+        )
+
     preset = available_presets[preset_name]
 
+    if preset_name not in _VALID_MODES:
+        logger.warning(
+            "morning_briefing_preset_mode_fallback",
+            preset=preset_name,
+            fallback_mode="balanced",
+        )
     raw_mode = preset_name if preset_name in _VALID_MODES else "balanced"
     mode = cast(Literal["precise", "balanced", "creative", "fast"], raw_mode)
 
@@ -162,22 +149,23 @@ def prepare_llm_settings() -> LLMSettings:
 
 
 async def send_notification(date: str) -> None:
-    click = f"{job_config.mimir_host}/brief" if job_config.mimir_host else None
+    with _tracer.start_as_current_span("send_notification", kind=SpanKind.CLIENT):
+        click = f"{job_config.mimir_host}/brief" if job_config.mimir_host else None
 
-    if not job_config.ntfy_url or not job_config.ntfy_morning_brief_topic:
-        logger.warning(
-            "morning_briefing_notification_skipped",
-            reason="Missing ntfy_url or ntfy_morning_brief_topic in config",
+        if not job_config.ntfy_url or not job_config.ntfy_morning_brief_topic:
+            logger.warning(
+                "morning_briefing_notification_skipped",
+                reason="Missing ntfy_url or ntfy_morning_brief_topic in config",
+            )
+            return
+        await send_ntfy(
+            url=job_config.ntfy_url,
+            topic=job_config.ntfy_morning_brief_topic,
+            message=f"Mimir: your morning brief for {date} is ready",
+            title="Mimir - Morning Brief",
+            click_url=click,
+            tags="sunrise_over_mountains",
         )
-        return
-    await send_ntfy(
-        url=job_config.ntfy_url,
-        topic=job_config.ntfy_morning_brief_topic,
-        message=f"Mimir: your morning brief for {date} is ready",
-        title="Mimir - Morning Brief",
-        click_url=click,
-        tags="sunrise_over_mountains",
-    )
 
 
 async def run_morning_briefing() -> None:
@@ -187,17 +175,14 @@ async def run_morning_briefing() -> None:
     logger.info("morning_briefing_started")
 
     try:
-        if not job_config.timezone:
-            logger.error(
-                "morning_briefing_failed",
-                error="Missing timezone in config",
-            )
-            return
+        assert job_config.timezone is not None  # guaranteed by validate_config()
         tz = ZoneInfo(job_config.timezone)
         now = datetime.now(tz)
         today_date = now.date().isoformat()
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
+        today_end = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
 
         events, todos = await get_calendar_data(today_start, today_end)
 
@@ -231,18 +216,19 @@ async def run_morning_briefing() -> None:
         with _tracer.start_as_current_span(
             "call_agent_core_api", kind=SpanKind.CLIENT
         ) as span:
-            if not job_config.agent_core_api_url:
-                logger.error(
-                    "morning_briefing_failed",
-                    error="Missing agent_core_api_url in config",
-                )
-                return
+            assert (
+                job_config.agent_core_api_url is not None
+            )  # guaranteed by validate_config()
             span.set_attribute("agent_core_api_url", job_config.agent_core_api_url)
-            async with httpx.AsyncClient(
-                base_url=job_config.agent_core_api_url, timeout=300.0
-            ) as client:
-                response = await client.post("/api/raw", json=payload.model_dump())
-        response.raise_for_status()
+            try:
+                async with httpx.AsyncClient(
+                    base_url=job_config.agent_core_api_url, timeout=300.0
+                ) as client:
+                    response = await client.post("/api/raw", json=payload.model_dump())
+                response.raise_for_status()
+            except Exception as e:
+                span.set_status(StatusCode.ERROR, str(e))
+                raise
 
         logger.info(
             "morning_briefing_persisted",

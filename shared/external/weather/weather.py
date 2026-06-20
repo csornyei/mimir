@@ -3,9 +3,9 @@ import asyncio
 import httpx
 import yaml
 
-_client = httpx.AsyncClient(
-    timeout=10.0, base_url="https://api.open-meteo.com/v1/forecast"
-)
+from shared.logger import logger
+
+_OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast"
 
 
 _wmo_weather_codes = {
@@ -74,9 +74,11 @@ def _parse_forcast_data(forecast: dict) -> dict:
     return parsed_forecast
 
 
-async def _get_forecast(latitude: float, longitude: float) -> dict:
+async def _get_forecast(
+    latitude: float, longitude: float, client: httpx.AsyncClient
+) -> dict:
     try:
-        response = await _client.get(
+        response = await client.get(
             "",
             params={
                 "latitude": latitude,
@@ -91,8 +93,13 @@ async def _get_forecast(latitude: float, longitude: float) -> dict:
 
         data = response.json()
         return _parse_forcast_data(data)
-    except httpx.HTTPError as e:
-        print(f"HTTP error occurred: {e}")
+    except Exception as e:
+        logger.error(
+            "weather_forecast_fetch_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
         return {}
 
 
@@ -131,9 +138,11 @@ def _parse_today_weather_data(weather: dict) -> dict:
     return parsed_weather
 
 
-async def _get_today_weather(latitude: float, longitude: float) -> dict:
+async def _get_today_weather(
+    latitude: float, longitude: float, client: httpx.AsyncClient
+) -> dict:
     try:
-        response = await _client.get(
+        response = await client.get(
             "",
             params={
                 "latitude": latitude,
@@ -149,8 +158,13 @@ async def _get_today_weather(latitude: float, longitude: float) -> dict:
         data = response.json()
 
         return _parse_today_weather_data(data)
-    except httpx.HTTPError as e:
-        print(f"HTTP error occurred: {e}")
+    except Exception as e:
+        logger.error(
+            "weather_today_fetch_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
         return {}
 
 
@@ -159,27 +173,28 @@ async def get_weather_data(config_path: str) -> dict:
         config = yaml.safe_load(f)
 
     weather_data = {}
-    for location in config["locations"]:
-        latitude = location["latitude"]
-        longitude = location["longitude"]
-        [forecast, today_weather] = await asyncio.gather(
-            _get_forecast(latitude, longitude),
-            _get_today_weather(latitude, longitude),
-        )
-        weather_data[location["name"]] = {
-            "coordinates": {"latitude": latitude, "longitude": longitude},
-            "forecast": forecast,
-            "today_weather": today_weather,
-            "units": {
-                "temperature": "°C",
-                "wind_speed": "km/h",
-                "precipitation": "mm",
-                "precipitation_probability": "%",
-                "cloud_cover": "%",
-                "uv_index": "index",
-                "snowfall": "cm",
-            },
-        }
+    async with httpx.AsyncClient(timeout=10.0, base_url=_OPEN_METEO_BASE) as client:
+        for location in config["locations"]:
+            latitude = location["latitude"]
+            longitude = location["longitude"]
+            [forecast, today_weather] = await asyncio.gather(
+                _get_forecast(latitude, longitude, client),
+                _get_today_weather(latitude, longitude, client),
+            )
+            weather_data[location["name"]] = {
+                "coordinates": {"latitude": latitude, "longitude": longitude},
+                "forecast": forecast,
+                "today_weather": today_weather,
+                "units": {
+                    "temperature": "°C",
+                    "wind_speed": "km/h",
+                    "precipitation": "mm",
+                    "precipitation_probability": "%",
+                    "cloud_cover": "%",
+                    "uv_index": "index",
+                    "snowfall": "cm",
+                },
+            }
 
     return weather_data
 

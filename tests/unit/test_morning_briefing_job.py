@@ -63,54 +63,58 @@ def _mock_http_client() -> tuple[MagicMock, AsyncMock]:
 
 @pytest.mark.asyncio
 async def test_run_morning_briefing_skips_when_caldav_url_missing() -> None:
+    mock_cls, mock_instance = _mock_http_client()
     with (
         patch(
             "workflows.morning_briefing.main.job_config",
             _make_job_config(caldav_url=None),
         ),
-        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav,
+        patch("httpx.AsyncClient", mock_cls),
     ):
         await run_morning_briefing()
-        mock_dav.assert_not_called()
+        mock_instance.post.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_run_morning_briefing_skips_when_caldav_username_missing() -> None:
+    mock_cls, mock_instance = _mock_http_client()
     with (
         patch(
             "workflows.morning_briefing.main.job_config",
             _make_job_config(caldav_username=None),
         ),
-        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav,
+        patch("httpx.AsyncClient", mock_cls),
     ):
         await run_morning_briefing()
-        mock_dav.assert_not_called()
+        mock_instance.post.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_run_morning_briefing_skips_when_caldav_password_missing() -> None:
+    mock_cls, mock_instance = _mock_http_client()
     with (
         patch(
             "workflows.morning_briefing.main.job_config",
             _make_job_config(caldav_password=None),
         ),
-        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav,
+        patch("httpx.AsyncClient", mock_cls),
     ):
         await run_morning_briefing()
-        mock_dav.assert_not_called()
+        mock_instance.post.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_run_morning_briefing_skips_when_agent_core_url_missing() -> None:
+    mock_cls, mock_instance = _mock_http_client()
     with (
         patch(
             "workflows.morning_briefing.main.job_config",
             _make_job_config(agent_core_api_url=None),
         ),
-        patch("workflows.morning_briefing.main.CalDAVClient") as mock_dav,
+        patch("httpx.AsyncClient", mock_cls),
     ):
         await run_morning_briefing()
-        mock_dav.assert_not_called()
+        mock_instance.post.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -228,6 +228,8 @@ def test_parse_today_hourly_all_same_day_is_not_trimmed():
 
 @pytest.mark.asyncio
 async def test_get_forecast_returns_parsed_data_on_success():
+    import httpx
+
     from shared.external.weather.weather import _get_forecast
 
     payload = {
@@ -242,11 +244,10 @@ async def test_get_forecast_returns_parsed_data_on_success():
     mock_response.raise_for_status.return_value = None
     mock_response.json.return_value = payload
 
-    with patch(
-        "shared.external.weather.weather._client.get",
-        new=AsyncMock(return_value=mock_response),
-    ):
-        result = await _get_forecast(47.5, 19.0)
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    result = await _get_forecast(47.5, 19.0, mock_client)
 
     assert result["daily"]["weather_code"] == ["Clear sky"]
 
@@ -257,11 +258,10 @@ async def test_get_forecast_returns_empty_dict_on_http_error():
 
     from shared.external.weather.weather import _get_forecast
 
-    with patch(
-        "shared.external.weather.weather._client.get",
-        new=AsyncMock(side_effect=httpx.HTTPError("timeout")),
-    ):
-        result = await _get_forecast(47.5, 19.0)
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get = AsyncMock(side_effect=httpx.HTTPError("timeout"))
+
+    result = await _get_forecast(47.5, 19.0, mock_client)
 
     assert result == {}
 
@@ -273,6 +273,8 @@ async def test_get_forecast_returns_empty_dict_on_http_error():
 
 @pytest.mark.asyncio
 async def test_get_today_weather_returns_parsed_data_on_success():
+    import httpx
+
     from shared.external.weather.weather import _get_today_weather
 
     payload = _make_today_payload()
@@ -280,11 +282,10 @@ async def test_get_today_weather_returns_parsed_data_on_success():
     mock_response.raise_for_status.return_value = None
     mock_response.json.return_value = payload
 
-    with patch(
-        "shared.external.weather.weather._client.get",
-        new=AsyncMock(return_value=mock_response),
-    ):
-        result = await _get_today_weather(47.5, 19.0)
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    result = await _get_today_weather(47.5, 19.0, mock_client)
 
     assert result["current"]["weather_code"] == "Mainly clear"
 
@@ -295,11 +296,10 @@ async def test_get_today_weather_returns_empty_dict_on_http_error():
 
     from shared.external.weather.weather import _get_today_weather
 
-    with patch(
-        "shared.external.weather.weather._client.get",
-        new=AsyncMock(side_effect=httpx.HTTPError("timeout")),
-    ):
-        result = await _get_today_weather(47.5, 19.0)
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get = AsyncMock(side_effect=httpx.HTTPError("timeout"))
+
+    result = await _get_today_weather(47.5, 19.0, mock_client)
 
     assert result == {}
 
