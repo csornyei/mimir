@@ -22,10 +22,6 @@ def render_rss_article_summarize(
     )
 
 
-def _opt_str(value: Any) -> str | None:
-    return value if isinstance(value, str) else None
-
-
 def build_summarize_prompt(
     article: dict[str, Any],
     semantic_memory: str,
@@ -35,8 +31,8 @@ def build_summarize_prompt(
             "role": "user",
             "content": render_rss_article_summarize(
                 title=str(article.get("title", "")),
-                feed_name=_opt_str(article.get("feed_name")),
-                category=_opt_str(article.get("category")),
+                feed_name=article.get("feed_name"),
+                category=article.get("category"),
                 url=str(article.get("url", "")),
                 content=str(article.get("content", "")),
                 semantic_memory=semantic_memory,

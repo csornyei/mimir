@@ -16,8 +16,6 @@ from shared.telemetry import setup_tracing
 from workflows.config import workflow_config as config
 from workflows.rss_digest.prompt import build_summarize_prompt
 
-setup_tracing(service_name=config.service_name)
-
 _tracer = trace.get_tracer("mimir.workflows.rss_digest.summarizer")
 
 _PASSTHROUGH_KEYS = ("id", "title", "url", "feed_name", "category")
@@ -27,6 +25,9 @@ def validate_config() -> bool:
     if not config.agent_core_api_url:
         logger.warning("rss_summarizer_skipped", reason="Missing agent_core_api_url")
         return False
+    if not config.file_api_url:
+        logger.warning("rss_summarizer_skipped", reason="Missing file_api_url")
+        return False
     return True
 
 
@@ -35,6 +36,14 @@ async def _load_semantic_memory() -> str:
 
 
 def _extract_json_object(content: str) -> dict[str, Any] | None:
+    try:
+        result = json.loads(content.strip())
+        if isinstance(result, dict):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # Fallback: scan for the first complete JSON object by brace depth.
     for start in (i for i, c in enumerate(content) if c == "{"):
         depth = 0
         for i in range(start, len(content)):
@@ -50,16 +59,20 @@ def _extract_json_object(content: str) -> dict[str, Any] | None:
                     if isinstance(result, dict):
                         return result
                     break
+
     logger.warning("rss_summarizer_parse_failed", preview=content[:200])
     return None
 
 
 async def _summarize_one(
-    client: httpx.AsyncClient, article: dict[str, Any], semantic_memory: str
+    client: httpx.AsyncClient,
+    article: dict[str, Any],
+    semantic_memory: str,
+    conversation_id: str,
 ) -> dict[str, Any] | None:
     messages = build_summarize_prompt(article, semantic_memory)
     payload = RawChatRequest(
-        conversation_id=f"rss_summarize|{datetime.now(UTC).strftime('%Y%m%dT%H%M%S')}|{article['id']}",
+        conversation_id=conversation_id,
         user_id="rss_digest_summarizer",
         messages=[Message(**m) for m in messages],
         llm_parameters=LLMSettings(
@@ -86,21 +99,24 @@ async def _summarize_one(
     }
 
 
-async def summarize(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    # Guaranteed non-None by validate_config; narrow for the type checker.
-    assert config.agent_core_api_url is not None
+async def summarize(
+    articles: list[dict[str, Any]], conversation_id: str
+) -> list[dict[str, Any]]:
+    if not config.agent_core_api_url:
+        raise RuntimeError("agent_core_api_url is not configured")
     semantic_memory = await _load_semantic_memory()
-    summaries: list[dict[str, Any]] = []
-    async with httpx.AsyncClient(
-        base_url=config.agent_core_api_url, timeout=300.0
-    ) as client:
-        for article in articles:
+    sem = asyncio.Semaphore(config.rss_summarizer_concurrency)
+
+    async def _bounded(article: dict[str, Any]) -> dict[str, Any] | None:
+        async with sem:
             with _tracer.start_as_current_span(
                 "summarize_article", kind=SpanKind.CLIENT
             ) as span:
                 span.set_attribute("article_id", article.get("id", 0))
                 try:
-                    result = await _summarize_one(client, article, semantic_memory)
+                    return await _summarize_one(
+                        client, article, semantic_memory, conversation_id
+                    )
                 except Exception as e:
                     span.set_status(StatusCode.ERROR, str(e))
                     logger.error(
@@ -109,9 +125,14 @@ async def summarize(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         error=str(e),
                         error_type=type(e).__name__,
                     )
-                    continue
-            if result is not None:
-                summaries.append(result)
+                    return None
+
+    async with httpx.AsyncClient(
+        base_url=config.agent_core_api_url, timeout=300.0
+    ) as client:
+        results = await asyncio.gather(*(_bounded(a) for a in articles))
+
+    summaries = [r for r in results if r is not None]
     logger.info(
         "rss_summarizer_done",
         input_count=len(articles),
@@ -134,19 +155,36 @@ def _parse_args() -> argparse.Namespace:
         default="/tmp/summaries.json",
         help="Path to write the summaries JSON list",
     )
+    parser.add_argument(
+        "--start",
+        type=int,
+        default=None,
+        help="Window start hour (UTC, 0-23) — used to build the run conversation ID",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
+    setup_tracing(service_name=config.service_name)
     args = _parse_args()
-    articles: list[dict[str, Any]] = json.loads(
-        Path(args.input).read_text(encoding="utf-8")
-    )
+
+    try:
+        articles: list[dict[str, Any]] = json.loads(
+            Path(args.input).read_text(encoding="utf-8")
+        )
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.error("rss_summarizer_input_failed", error=str(e), path=args.input)
+        Path(args.output).write_text("[]", encoding="utf-8")
+        return
 
     if not validate_config():
         summaries: list[dict[str, Any]] = []
     else:
-        summaries = asyncio.run(summarize(articles))
+        start_hour = args.start if args.start is not None else datetime.now(UTC).hour
+        conversation_id = (
+            f"rss_digest|{datetime.now(UTC).strftime('%Y-%m-%d')}--{start_hour:02d}"
+        )
+        summaries = asyncio.run(summarize(articles, conversation_id))
 
     Path(args.output).write_text(json.dumps(summaries), encoding="utf-8")
 

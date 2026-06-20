@@ -192,6 +192,10 @@ class RssDigestEntry(Base):
     interesting_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    __table_args__ = (
+        UniqueConstraint("miniflux_entry_id", "window", name="uq_rss_entry_window"),
+    )
+
 
 class HealthSnapshot(Base):
     __tablename__ = "health_snapshots"

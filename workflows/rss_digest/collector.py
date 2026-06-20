@@ -15,8 +15,6 @@ from shared.models import RssDigestEntry
 from shared.telemetry import setup_tracing
 from workflows.config import workflow_config as config
 
-setup_tracing(service_name=config.service_name)
-
 _tracer = trace.get_tracer("mimir.workflows.rss_digest.collector")
 
 
@@ -38,7 +36,7 @@ def _passes_threshold(summary: dict[str, Any]) -> bool:
 
 def _resolve_url(summary: dict[str, Any]) -> str:
     url = summary.get("url") or ""
-    if url.startswith("https"):
+    if url.startswith("http"):
         return url
     return f"{config.miniflux_url}/unread/entry/{summary.get('id', 0)}"
 
@@ -103,6 +101,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    setup_tracing(service_name=config.service_name)
     args = _parse_args()
     if not validate_config():
         return

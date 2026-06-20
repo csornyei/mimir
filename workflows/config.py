@@ -13,10 +13,9 @@ class WorkflowConfig(SharedConfig):
     miniflux_url: Optional[str] = None
     miniflux_username: Optional[str] = None
     miniflux_password: Optional[str] = None
-    rss_digest_min_entries: int = 10
-    rss_digest_picks: int = 10
     rss_article_max_tokens: int = 4000
     rss_digest_score_threshold: float = 7.0
+    rss_summarizer_concurrency: int = 5
 
     # Health coach
     health_coach_endpoint_url: Optional[str] = None

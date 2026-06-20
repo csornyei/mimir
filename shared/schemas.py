@@ -141,6 +141,10 @@ class DigestArticle(BaseModel):
     category: str | None
     window: str
     digest_run_at: datetime
+    summary: str | None = None
+    tags: list[str] | None = None
+    interesting_score: float | None = None
+    relevance_score: float | None = None
 
     model_config = {"from_attributes": True}
 

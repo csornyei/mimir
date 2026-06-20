@@ -42,8 +42,6 @@ class AgentConfig(SharedConfig):
     miniflux_url: str | None = None
     miniflux_username: str | None = None
     miniflux_password: str | None = None
-    rss_digest_min_entries: int = 10
-    rss_digest_picks: int = 10
 
     llm_scheduler_model: str | None = None
 

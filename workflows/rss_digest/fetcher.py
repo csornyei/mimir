@@ -14,8 +14,6 @@ from shared.telemetry import setup_tracing
 from shared.tokens import truncate_to_tokens
 from workflows.config import workflow_config as config
 
-setup_tracing(service_name=config.service_name)
-
 _tracer = trace.get_tracer("mimir.workflows.rss_digest.fetcher")
 
 
@@ -97,12 +95,13 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    setup_tracing(service_name=config.service_name)
     args = _parse_args()
     now = datetime.now(UTC)
     w_end = now.replace(hour=args.end, minute=0, second=0, microsecond=0)
     w_start = now.replace(hour=args.start, minute=0, second=0, microsecond=0)
-    if args.start > args.end:  # window crosses midnight
-        w_end += timedelta(days=1)
+    if args.start > args.end:  # window crosses midnight — start was yesterday
+        w_start -= timedelta(days=1)
     w_label = args.label or f"{args.start:02d}-{args.end:02d}"
 
     if not validate_config():
