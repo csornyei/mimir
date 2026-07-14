@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-mcp-svc
+  namespace: mimir
+spec:
+  selector:
+    app: mimir-mcp
+  ports:
+    - port: 8010
+      targetPort: 8010

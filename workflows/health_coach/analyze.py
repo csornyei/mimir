@@ -40,6 +40,11 @@ def validate_config() -> bool:
     return True
 
 
+def require_config() -> None:
+    if not validate_config():
+        raise RuntimeError("Health analyze missing required configuration")
+
+
 def get_week_start(tz: str) -> date:
     today = datetime.now(ZoneInfo(tz)).date()
     return today - timedelta(days=today.weekday()) - timedelta(weeks=1)
@@ -258,7 +263,7 @@ async def run(week_start: date) -> None:
 
         if not recent_weeks:
             logger.error("health_analyze_no_history", week_start=str(week_start))
-            return
+            raise RuntimeError(f"No health history available for {week_start}")
 
         if len(recent_weeks) == 1:
             logger.info(
@@ -312,8 +317,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = _parse_args()
-    if not validate_config():
-        return
+    require_config()
 
     if args.week_start:
         try:
@@ -322,7 +326,7 @@ def main() -> None:
             logger.error(
                 "health_analyze_invalid_date", date=args.week_start, error=str(exc)
             )
-            return
+            raise
     else:
         week_start = get_week_start(config.timezone or "UTC")
 
@@ -337,6 +341,7 @@ def main() -> None:
                 error_type=type(e).__name__,
                 exc_info=True,
             )
+            raise
         finally:
             await dispose_db()
 

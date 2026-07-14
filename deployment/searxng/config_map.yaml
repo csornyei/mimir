@@ -1,0 +1,328 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng
+  namespace: mimir
+  labels:
+    app: mimir
+data:
+  settings.yaml: |
+    general:
+      debug: false
+      instance_name: "SearXNG"
+      privacypolicy_url: false
+      donation_url: false
+      contact_url: false
+      enable_metrics: true
+      open_metrics: ""
+
+    brand:
+      docs_url: https://docs.searxng.org/
+      public_instances: https://searx.space
+      wiki_url: https://github.com/searxng/searxng/wiki
+      issue_url: https://github.com/searxng/searxng/issues
+
+    search:
+      safe_search: 0
+      autocomplete: ""
+      autocomplete_min: 4
+      favicon_resolver: ""
+      default_lang: "auto"
+      ban_time_on_fail: 5
+      max_ban_time_on_fail: 120
+      suspended_times:
+        SearxEngineAccessDenied: 180
+        SearxEngineCaptcha: 3600
+        SearxEngineTooManyRequests: 180
+        cf_SearxEngineCaptcha: 1296000
+        cf_SearxEngineAccessDenied: 86400
+        recaptcha_SearxEngineCaptcha: 604800
+      formats:
+        - json
+
+    server:
+      port: 8080
+      bind_address: "0.0.0.0"
+      base_url: "http://searxng.tail30e7da.ts.net"
+      limiter: false
+      public_instance: false
+      secret_key: "replace_this_with_a_random_secret_key"
+      image_proxy: false
+      http_protocol_version: "1.0"
+      method: "POST"
+      default_http_headers:
+        X-Content-Type-Options: nosniff
+        X-Download-Options: noopen
+        X-Robots-Tag: noindex, nofollow
+        Referrer-Policy: no-referrer
+
+    valkey:
+      url: false
+
+    outgoing:
+      request_timeout: 8.0
+      useragent_suffix: ""
+      pool_connections: 100
+      pool_maxsize: 20
+      enable_http2: true
+
+    plugins:
+      searx.plugins.calculator.SXNGPlugin:
+        active: true
+      searx.plugins.infinite_scroll.SXNGPlugin:
+        active: false
+      searx.plugins.hash_plugin.SXNGPlugin:
+        active: true
+      searx.plugins.self_info.SXNGPlugin:
+        active: true
+      searx.plugins.unit_converter.SXNGPlugin:
+        active: true
+      searx.plugins.ahmia_filter.SXNGPlugin:
+        active: true
+      searx.plugins.hostnames.SXNGPlugin:
+        active: true
+      searx.plugins.time_zone.SXNGPlugin:
+        active: true
+      searx.plugins.oa_doi_rewrite.SXNGPlugin:
+        active: false
+      searx.plugins.tor_check.SXNGPlugin:
+        active: false
+      searx.plugins.tracker_url_remover.SXNGPlugin:
+        active: true
+
+    categories_as_tabs:
+      general:
+      images:
+      videos:
+      news:
+      map:
+      music:
+      it:
+      science:
+      files:
+      social media:
+
+    engines:
+      - name: arch linux wiki
+        engine: archlinux
+        shortcut: al
+
+      - name: arxiv
+        engine: arxiv
+        shortcut: arx
+
+      - name: bandcamp
+        engine: bandcamp
+        shortcut: bc
+        categories: music
+
+      - name: wikipedia
+        engine: wikipedia
+        shortcut: wp
+        display_type: ["infobox"]
+        categories: [general]
+
+      - name: bing images
+        engine: bing_images
+        shortcut: bii
+      - name: bing news
+        engine: bing_news
+        shortcut: bin
+      - name: bing videos
+        engine: bing_videos
+        shortcut: biv
+
+      - name: docker hub
+        engine: docker_hub
+        shortcut: dh
+        categories: [it, packages]
+
+      - name: wikidata
+        engine: wikidata
+        shortcut: wd
+        timeout: 3.0
+        weight: 2
+        display_type: ["infobox"]
+        categories: [general]
+      - name: duckduckgo
+        engine: duckduckgo
+        shortcut: ddg
+      - name: duckduckgo images
+        engine: duckduckgo_extra
+        categories: [images]
+        ddg_category: images
+        shortcut: ddi
+      - name: duckduckgo videos
+        engine: duckduckgo_extra
+        categories: [videos]
+        ddg_category: videos
+        shortcut: ddv
+      - name: duckduckgo news
+        engine: duckduckgo_extra
+        categories: [news]
+        ddg_category: news
+        shortcut: ddn
+
+      - name: github
+        engine: github
+        shortcut: gh
+
+      - name: google
+        engine: google
+        shortcut: go
+      - name: google images
+        engine: google_images
+        shortcut: goi
+      - name: google news
+        engine: google_news
+        shortcut: gon
+      - name: google videos
+        engine: google_videos
+        shortcut: gov
+      - name: google scholar
+        engine: google_scholar
+        shortcut: gos
+
+      - name: imdb
+        engine: imdb
+        shortcut: imdb
+        timeout: 6.0
+
+      - name: mdn
+        shortcut: mdn
+        engine: json_engine
+        categories: [it]
+        paging: true
+        search_url: https://developer.mozilla.org/api/v1/search?q={query}&page={pageno}
+        results_query: documents
+        url_query: mdn_url
+        url_prefix: https://developer.mozilla.org
+        title_query: title
+        content_query: summary
+        about:
+          website: https://developer.mozilla.org
+          wikidata_id: Q3273508
+          official_api_documentation: null
+          use_official_api: false
+          require_api_key: false
+          results: JSON
+
+      - name: pypi
+        shortcut: pypi
+        engine: pypi
+
+      - name: brave
+        engine: brave
+        shortcut: br
+        time_range_support: true
+        paging: true
+        categories: [general, web]
+        brave_category: search
+      - name: brave.images
+        engine: brave
+        network: brave
+        shortcut: brimg
+        categories: [images, web]
+        brave_category: images
+      - name: brave.videos
+        engine: brave
+        network: brave
+        shortcut: brvid
+        categories: [videos, web]
+        brave_category: videos
+      - name: brave.news
+        engine: brave
+        network: brave
+        shortcut: brnews
+        categories: news
+        brave_category: news
+
+      - name: qwant
+        qwant_categ: web
+        engine: qwant
+        shortcut: qw
+        categories: [general, web]
+        disabled: true
+      - name: qwant news
+        qwant_categ: news
+        engine: qwant
+        shortcut: qwn
+        categories: news
+        network: qwant
+      - name: qwant images
+        qwant_categ: images
+        engine: qwant
+        shortcut: qwi
+        categories: [images, web]
+        network: qwant
+      - name: qwant videos
+        qwant_categ: videos
+        engine: qwant
+        shortcut: qwv
+        categories: [videos, web]
+        network: qwant
+
+      - name: stackoverflow
+        engine: stackexchange
+        shortcut: st
+        api_site: "stackoverflow"
+        categories: [it, q&a]
+      - name: askubuntu
+        engine: stackexchange
+        shortcut: ubuntu
+        api_site: "askubuntu"
+        categories: [it, q&a]
+      - name: superuser
+        engine: stackexchange
+        shortcut: su
+        api_site: "superuser"
+        categories: [it, q&a]
+
+      - name: wikibooks
+        engine: mediawiki
+        weight: 0.5
+        shortcut: wb
+        categories: [general, wikimedia]
+        base_url: "https://{language}.wikibooks.org/"
+        search_type: text
+        about:
+          website: https://www.wikibooks.org/
+          wikidata_id: Q367
+      - name: wikinews
+        engine: mediawiki
+        shortcut: wn
+        categories: [news, wikimedia]
+        base_url: "https://{language}.wikinews.org/"
+        search_type: text
+        srsort: create_timestamp_desc
+        about:
+          website: https://www.wikinews.org/
+          wikidata_id: Q964
+      - name: wikisource
+        engine: mediawiki
+        weight: 0.5
+        shortcut: ws
+        categories: [general, wikimedia]
+        base_url: "https://{language}.wikisource.org/"
+        search_type: text
+        disabled: true
+        about:
+          website: https://www.wikisource.org/
+          wikidata_id: Q263
+      - name: wiktionary
+        engine: mediawiki
+        shortcut: wt
+        categories: [dictionaries, wikimedia]
+        base_url: "https://{language}.wiktionary.org/"
+        search_type: text
+        about:
+          website: https://www.wiktionary.org/
+          wikidata_id: Q151
+
+    doi_resolvers:
+      oadoi.org: "https://oadoi.org/"
+      doi.org: "https://doi.org/"
+      sci-hub.se: "https://sci-hub.se/"
+      sci-hub.st: "https://sci-hub.st/"
+      sci-hub.ru: "https://sci-hub.ru/"
+    default_doi_resolver: "oadoi.org"

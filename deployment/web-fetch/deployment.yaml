@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-web-fetch
+  namespace: mimir
+  labels:
+    app: mimir-web-fetch
+spec:
+  selector:
+    matchLabels:
+      app: mimir-web-fetch
+  template:
+    metadata:
+      labels:
+        app: mimir-web-fetch
+    spec:
+      containers:
+        - name: mimir-web-fetch
+          image: ghcr.io/csornyei/mimir-web_fetch:3.2.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "uv"
+            - "run"
+            - "fastapi"
+            - "run"
+            - "web_fetch/main.py"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8020"
+          ports:
+            - containerPort: 8020
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+          env:
+            - name: SERVICE_NAME
+              value: mimir-web-fetch
+            - name: ENVIRONMENT
+              value: homelab
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.alloy.svc.cluster.local:4317

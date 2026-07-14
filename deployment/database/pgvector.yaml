@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mimir-db
+  namespace: mimir
+  labels:
+    app: mimir-db
+spec:
+  selector:
+    matchLabels:
+      app: mimir-db
+  serviceName: mimir-db-pgvector
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: mimir-db
+    spec:
+      containers:
+        - name: mimir-database
+          image: pgvector/pgvector:pg18-trixie
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-db-secret
+                  key: postgres-db
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-db-secret
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-db-secret
+                  key: postgres-password
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "50m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: mimir-db-storage
+              mountPath: /var/lib/postgresql
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: mimir-db-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 25Gi

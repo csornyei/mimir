@@ -219,3 +219,5 @@ scratch/
 
 !agent_ui/src/lib
 vault
+
+deployment/*/*_secret.yaml

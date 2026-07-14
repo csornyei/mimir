@@ -1,0 +1,33 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mimir
+rules:
+  # Core API group
+  - apiGroups: [""]
+    resources:
+      - pods
+      - services
+      - namespaces
+      - nodes
+      - configmaps
+    verbs: ["get", "list", "watch"]
+
+  # Pod logs — subresource, needs its own rule
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # Pod creation — write op, goes through approval flow
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create"]
+
+  # apps API group
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch"]

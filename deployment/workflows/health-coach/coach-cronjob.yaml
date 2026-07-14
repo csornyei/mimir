@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: health-coach
+  namespace: argo
+spec:
+  schedules:
+    - "0 8 * * 1"
+  timezone: "Europe/Budapest"
+  concurrencyPolicy: Forbid
+  workflowSpec:
+    serviceAccountName: argo-workflow
+    entrypoint: run-coach
+    templates:
+      - name: run-coach
+        container:
+          image: ghcr.io/csornyei/mimir-health-coach:3.2.0
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          env:
+            - name: SERVICE_NAME
+              value: mimir-health-coach
+            - name: ENVIRONMENT
+              value: homelab
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.alloy.svc.cluster.local:4317
+            - name: TIMEZONE
+              value: Europe/Budapest
+            - name: OWNER_NAME
+              value: Máté
+            - name: LLM_MODEL
+              value: gemma4
+            - name: AGENT_CORE_API_URL
+              value: http://mimir-agent-svc.mimir.svc.cluster.local:8000
+            - name: HEALTH_COACH_ENDPOINT_URL
+              value: https://health.tail30e7da.ts.net
+            - name: HEALTH_COACH_TYPE
+              value: week
+            - name: NTFY_URL
+              value: http://ntfy-svc.ntfy.svc.cluster.local
+            - name: NTFY_HEALTH_TOPIC
+              value: mimir-health-coach
+            - name: MIMIR_HOST
+              value: https://mimir.tail30e7da.ts.net

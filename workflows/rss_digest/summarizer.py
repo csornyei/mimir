@@ -31,6 +31,11 @@ def validate_config() -> bool:
     return True
 
 
+def _require_config() -> None:
+    if not validate_config():
+        raise RuntimeError("RSS summarizer missing required configuration")
+
+
 async def _load_semantic_memory() -> str:
     return await get_file_api_client().read_file(config.semantic_memory_path)
 
@@ -174,17 +179,14 @@ def main() -> None:
         )
     except (FileNotFoundError, json.JSONDecodeError) as e:
         logger.error("rss_summarizer_input_failed", error=str(e), path=args.input)
-        Path(args.output).write_text("[]", encoding="utf-8")
-        return
+        raise
 
-    if not validate_config():
-        summaries: list[dict[str, Any]] = []
-    else:
-        start_hour = args.start if args.start is not None else datetime.now(UTC).hour
-        conversation_id = (
-            f"rss_digest|{datetime.now(UTC).strftime('%Y-%m-%d')}--{start_hour:02d}"
-        )
-        summaries = asyncio.run(summarize(articles, conversation_id))
+    _require_config()
+    start_hour = args.start if args.start is not None else datetime.now(UTC).hour
+    conversation_id = (
+        f"rss_digest|{datetime.now(UTC).strftime('%Y-%m-%d')}--{start_hour:02d}"
+    )
+    summaries = asyncio.run(summarize(articles, conversation_id))
 
     Path(args.output).write_text(json.dumps(summaries), encoding="utf-8")
 

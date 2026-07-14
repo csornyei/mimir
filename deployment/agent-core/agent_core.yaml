@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-agent-core
+  namespace: mimir
+  labels:
+    app: mimir-agent-core
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mimir-agent-core
+  template:
+    metadata:
+      labels:
+        app: mimir-agent-core
+    spec:
+      containers:
+        - name: mimir-agent-core
+          image: ghcr.io/csornyei/mimir-api:3.2.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "uv"
+            - "run"
+            - "fastapi"
+            - "run"
+            - "agent_core/main.py"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+          ports:
+            - containerPort: 8000
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+          env:
+            - name: SERVICE_NAME
+              value: mimir-agent-core
+            - name: ENVIRONMENT
+              value: homelab
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.alloy.svc.cluster.local:4317
+
+            - name: OWNER_NAME
+              value: Máté
+            - name: LLM_BASE_URL
+              value: http://litellm.ai-infra.svc.cluster.local:4000
+            - name: LLM_MODEL
+              value: gemma4
+            - name: LLM_MAX_TOKENS
+              value: "2048"
+            - name: LLM_TEMPERATURE
+              value: "0.7"
+            - name: EMBEDDING_BASE_URL
+              value: http://litellm.ai-infra.svc.cluster.local:4000
+            - name: EMBEDDING_MODEL
+              value: nomic-embed
+
+            - name: VAULT_PATH
+              value: /vault
+            - name: SEMANTIC_MEMORY_PATH
+              value: memory.md
+
+            - name: MCP_URL
+              value: http://mimir-mcp-svc.mimir.svc.cluster.local:8010
+
+            - name: FILE_API_URL
+              value: http://obsidian-file-api-clusterip.syncthing.svc.cluster.local:8000
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-litellm-secret
+                  key: api_key
+
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-db-secret
+                  key: postgres-url
+
+            - name: CALDAV_URL
+              value: http://baikal-svc.calendar.svc.cluster.local/dav.php
+            - name: CALDAV_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-caldav-secret
+                  key: caldav-username
+            - name: CALDAV_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-caldav-secret
+                  key: caldav-password
+
+            - name: TOOL_MAX_STEPS
+              value: "10"
+            - name: TOOL_CALL_TIMEOUT_SECONDS
+              value: "60"
+
+          volumeMounts:
+            - name: vault-storage
+              mountPath: /vault
+
+      volumes:
+        - name: vault-storage
+          persistentVolumeClaim:
+            claimName: mimir-vault-pvc
