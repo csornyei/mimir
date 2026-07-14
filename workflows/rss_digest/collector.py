@@ -7,6 +7,7 @@ from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from shared.db import dispose_db, get_session, initialize_db
 from shared.external.ntfy import send_ntfy
@@ -23,6 +24,11 @@ def validate_config() -> bool:
         logger.warning("rss_collector_skipped", reason="Missing database_url")
         return False
     return True
+
+
+def _require_config() -> None:
+    if not validate_config():
+        raise RuntimeError("RSS collector missing required configuration")
 
 
 def _passes_threshold(summary: dict[str, Any]) -> bool:
@@ -48,22 +54,34 @@ async def collect(summaries: list[dict[str, Any]], window_label: str) -> int:
     with _tracer.start_as_current_span("store_digest_entries", kind=SpanKind.INTERNAL):
         async with get_session() as session:
             for pick in picks:
-                session.add(
-                    RssDigestEntry(
-                        miniflux_entry_id=pick.get("id", 0),
-                        title=pick.get("title", ""),
-                        url=_resolve_url(pick),
-                        feed_name=pick.get("feed_name"),
-                        category=pick.get("category"),
-                        digest_run_at=now,
-                        window=window_label,
-                        summary=pick.get("summary"),
-                        tags=pick.get("tags"),
-                        interesting_score=pick.get("interesting_score"),
-                        relevance_score=pick.get("relevance_score"),
-                    )
+                stmt = pg_insert(RssDigestEntry).values(
+                    miniflux_entry_id=pick.get("id", 0),
+                    title=pick.get("title", ""),
+                    url=_resolve_url(pick),
+                    feed_name=pick.get("feed_name"),
+                    category=pick.get("category"),
+                    digest_run_at=now,
+                    window=window_label,
+                    summary=pick.get("summary"),
+                    tags=pick.get("tags"),
+                    interesting_score=pick.get("interesting_score"),
+                    relevance_score=pick.get("relevance_score"),
                 )
-            await session.commit()
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["miniflux_entry_id", "window"],
+                    set_={
+                        "title": stmt.excluded.title,
+                        "url": stmt.excluded.url,
+                        "feed_name": stmt.excluded.feed_name,
+                        "category": stmt.excluded.category,
+                        "digest_run_at": stmt.excluded.digest_run_at,
+                        "summary": stmt.excluded.summary,
+                        "tags": stmt.excluded.tags,
+                        "interesting_score": stmt.excluded.interesting_score,
+                        "relevance_score": stmt.excluded.relevance_score,
+                    },
+                )
+                await session.execute(stmt)
 
     logger.info(
         "rss_collector_stored",
@@ -103,8 +121,7 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     setup_tracing(service_name=config.service_name)
     args = _parse_args()
-    if not validate_config():
-        return
+    _require_config()
     summaries: list[dict[str, Any]] = json.loads(
         Path(args.input).read_text(encoding="utf-8")
     )

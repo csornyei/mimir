@@ -1,6 +1,7 @@
 import argparse
 import asyncio
-from datetime import date
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import httpx
 from opentelemetry import trace
@@ -34,6 +35,16 @@ def validate_config() -> bool:
         )
         return False
     return True
+
+
+def _require_config() -> None:
+    if not validate_config():
+        raise RuntimeError("Health summarize missing required configuration")
+
+
+def get_week_start(tz: str) -> date:
+    today = datetime.now(ZoneInfo(tz)).date()
+    return today - timedelta(days=today.weekday()) - timedelta(weeks=1)
 
 
 async def get_analysis(week_start: date) -> HealthAnalysis | None:
@@ -97,7 +108,7 @@ async def run(week_start: date) -> None:
                 "health_summarize_no_analysis",
                 week_start=str(week_start),
             )
-            return
+            raise RuntimeError(f"No health analysis found for {week_start}")
 
         summary_md = await call_llm(week_start, analysis.analysis_md)
 
@@ -115,24 +126,26 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--week-start",
         type=str,
-        required=True,
-        help="ISO date (YYYY-MM-DD) of the week to summarize.",
+        default=None,
+        help="ISO date (YYYY-MM-DD) of the week to summarize. Defaults to last completed week.",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
-    if not validate_config():
-        return
+    _require_config()
 
-    try:
-        week_start = date.fromisoformat(args.week_start)
-    except ValueError as exc:
-        logger.error(
-            "health_summarize_invalid_date", date=args.week_start, error=str(exc)
-        )
-        return
+    if args.week_start:
+        try:
+            week_start = date.fromisoformat(args.week_start)
+        except ValueError as exc:
+            logger.error(
+                "health_summarize_invalid_date", date=args.week_start, error=str(exc)
+            )
+            raise
+    else:
+        week_start = get_week_start(config.timezone or "UTC")
 
     async def _run() -> None:
         initialize_db(config.database_url)
@@ -145,6 +158,7 @@ def main() -> None:
                 error_type=type(e).__name__,
                 exc_info=True,
             )
+            raise
         finally:
             await dispose_db()
 

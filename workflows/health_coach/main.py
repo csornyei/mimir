@@ -38,6 +38,11 @@ def validate_config() -> bool:
     return True
 
 
+def _require_config() -> None:
+    if not validate_config():
+        raise RuntimeError("Health coach missing required configuration")
+
+
 async def fetch_fitness_data(endpoint_url: str, summary_type: str) -> str:
     with _tracer.start_as_current_span(
         "fetch_fitness_data", kind=SpanKind.CLIENT
@@ -89,8 +94,7 @@ async def send_notification() -> None:
 
 
 async def run_health_coach() -> None:
-    if not validate_config():
-        return
+    _require_config()
 
     # Guaranteed non-None by validate_config; narrow for the type checker.
     assert config.health_coach_endpoint_url is not None
@@ -154,6 +158,7 @@ async def run_health_coach() -> None:
             error_type=type(e).__name__,
             exc_info=True,
         )
+        raise
 
 
 if __name__ == "__main__":

@@ -33,6 +33,11 @@ def validate_config() -> bool:
     return True
 
 
+def _require_config() -> None:
+    if not validate_config():
+        raise RuntimeError("RSS fetcher missing required configuration")
+
+
 def _to_article(entry: dict[str, Any]) -> dict[str, Any]:
     content = entry.get("content") or entry.get("summary") or ""
     return {
@@ -68,7 +73,7 @@ async def fetch(
                 error_type=type(e).__name__,
                 exc_info=True,
             )
-            return []
+            raise
         span.set_attribute("entry_count", len(entries))
 
     articles = [_to_article(e) for e in entries]
@@ -104,10 +109,8 @@ def main() -> None:
         w_start -= timedelta(days=1)
     w_label = args.label or f"{args.start:02d}-{args.end:02d}"
 
-    if not validate_config():
-        articles: list[dict[str, Any]] = []
-    else:
-        articles = asyncio.run(fetch(w_start, w_end, w_label))
+    _require_config()
+    articles = asyncio.run(fetch(w_start, w_end, w_label))
 
     Path(args.output).write_text(json.dumps(articles), encoding="utf-8")
 
