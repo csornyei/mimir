@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mimir-vault-nfs
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  nfs:
+    server: 10.43.115.57
+    path: /pvc-d3382abc-0d20-4d09-bb77-f2c8ad92ce63
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    namespace: mimir
+    name: mimir-vault-pvc

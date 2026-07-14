@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: morning-briefing
+  namespace: argo
+spec:
+  schedules:
+    - "0 7 * * *"
+  timezone: "Europe/Budapest"
+  concurrencyPolicy: Forbid
+  workflowSpec:
+    serviceAccountName: argo-workflow
+    entrypoint: run-briefing
+    templates:
+      - name: run-briefing
+        container:
+          image: ghcr.io/csornyei/mimir-morning-briefing:3.2.0
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          env:
+            - name: TIMEZONE
+              value: "Europe/Budapest"
+            - name: CALDAV_URL
+              value: "http://baikal-svc.calendar.svc.cluster.local/dav.php"
+            - name: CALDAV_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-caldav-secret
+                  key: caldav-username
+            - name: CALDAV_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-caldav-secret
+                  key: caldav-password
+            - name: WEATHER_CONFIG_PATH
+              value: "/app/config/weather_config.yaml"
+            - name: LLM_PRESETS_PATH
+              value: "config/presets.yaml"
+            - name: LLM_MODEL
+              value: "gemma4"
+            - name: NTFY_URL
+              value: "http://ntfy-svc.ntfy.svc.cluster.local"
+            - name: NTFY_MORNING_BRIEF_TOPIC
+              value: "mimir-morning-briefs"
+            - name: MIMIR_HOST
+              value: "https://mimir.tail30e7da.ts.net"
+            - name: AGENT_CORE_API_URL
+              value: "http://mimir-agent-svc.mimir.svc.cluster.local:8000"
+            - name: OWNER_NAME
+              value: "Máté"
+            - name: ENV
+              value: "production"
+            - name: SERVICE_NAME
+              value: "mimir-morning-briefing"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://alloy.alloy.svc.cluster.local:4317"

@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-mcp
+  namespace: mimir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mimir-mcp
+  template:
+    metadata:
+      labels:
+        app: mimir-mcp
+    spec:
+      serviceAccountName: mimir
+      containers:
+        - name: mimir-mcp
+          image: ghcr.io/csornyei/mimir-mcp:3.2.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - "uv"
+            - "run"
+            - "python"
+            - "-m"
+            - "mcp_server.server"
+          ports:
+            - containerPort: 8010
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
+            requests:
+              memory: "128Mi"
+              cpu: "10m"
+          env:
+            - name: SERVICE_NAME
+              value: mimir-mcp
+            - name: ENVIRONMENT
+              value: homelab
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.alloy.svc.cluster.local:4317
+
+            - name: SEARXNG_URL
+              value: http://searxng-svc.mimir.svc.cluster.local:8080
+            - name: WEB_FETCH_URL
+              value: http://web-fetch-svc.mimir.svc.cluster.local:8020/fetch
+            - name: ALLOWED_HOSTS
+              value: "mimir-mcp-svc.mimir.svc.cluster.local:8010,pi:30020"
+            - name: DEFAULT_CALENDAR_NAME
+              value: "Naptár"
+            - name: CALDAV_URL
+              value: http://baikal-svc.calendar.svc.cluster.local/dav.php
+            - name: CALDAV_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-caldav-secret
+                  key: caldav-username
+            - name: CALDAV_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-caldav-secret
+                  key: caldav-password
+            - name: FORGEJO_URL
+              value: https://git.csornyei.com
+            - name: FORGEJO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-forgejo-secret
+                  key: forgejo_token
+
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: mimir-db-secret
+                  key: postgres-url
+          volumeMounts:
+            - name: vault-storage
+              mountPath: /vault
+      volumes:
+        - name: vault-storage
+          persistentVolumeClaim:
+            claimName: mimir-vault-pvc
