@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -174,6 +174,39 @@ class BriefDetail(BaseModel):
     date: str
     created_at: datetime
     messages: list[MessageResponse]
+
+
+# ── Health Coach ─────────────────────────────────────────────────────────────
+
+
+class HealthMetricSummary(BaseModel):
+    hrv_avg: float | None = None
+    resting_hr_avg: float | None = None
+    sleep_total_h: float | None = None
+    sleep_deep_h: float | None = None
+    sleep_rem_h: float | None = None
+    sleep_efficiency_pct: float | None = None
+    steps_avg: float | None = None
+    active_kcal_avg: float | None = None
+    exercise_min_avg: float | None = None
+    total_distance_km: float | None = None
+    avg_tdee: float | None = None
+    vo2_max: float | None = None
+    weight_kg_avg: float | None = None
+    body_fat_pct_avg: float | None = None
+
+
+class HealthWeekSummary(BaseModel):
+    week_start: date
+    week_end: date
+    created_at: datetime
+    has_analysis: bool
+
+
+class HealthWeekDetail(HealthWeekSummary):
+    analysis_md: str | None = None
+    metrics: HealthMetricSummary
+    snapshot_created_at: datetime
 
 
 # ── Models & Presets ──────────────────────────────────────────────────────────

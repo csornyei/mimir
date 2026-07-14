@@ -15,6 +15,7 @@ from agent_core.routes.brief import router as brief_router
 from agent_core.routes.chat import router as chat_router
 from agent_core.routes.conversations import router as conversations_router
 from agent_core.routes.digest import router as digest_router
+from agent_core.routes.health import router as health_router
 from agent_core.routes.ingest import router as ingest_router
 from agent_core.routes.memory import router as memory_router
 from agent_core.routes.models import router as models_router
@@ -56,6 +57,7 @@ app.include_router(approvals_router, prefix="/api", tags=["approvals"])
 app.include_router(memory_router, prefix="/api", tags=["memory"])
 app.include_router(digest_router, prefix="/api", tags=["digest"])
 app.include_router(brief_router, prefix="/api", tags=["brief"])
+app.include_router(health_router, prefix="/api", tags=["health"])
 app.include_router(models_router, prefix="/api", tags=["models"])
 app.add_api_websocket_route("/ws", ws_endpoint)
 
