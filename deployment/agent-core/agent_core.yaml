@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: mimir-agent-core
-          image: ghcr.io/csornyei/mimir-api:3.2.0
+          image: ghcr.io/csornyei/mimir-api:3.3.0
           imagePullPolicy: IfNotPresent
           args:
             - "uv"

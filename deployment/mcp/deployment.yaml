@@ -16,7 +16,7 @@ spec:
       serviceAccountName: mimir
       containers:
         - name: mimir-mcp
-          image: ghcr.io/csornyei/mimir-mcp:3.2.0
+          image: ghcr.io/csornyei/mimir-mcp:3.3.0
           imagePullPolicy: IfNotPresent
           args:
             - "uv"

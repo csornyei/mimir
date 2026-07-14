@@ -23,7 +23,7 @@ spec:
 
       - name: analyze
         container:
-          image: ghcr.io/csornyei/mimir-health-coach-analyze:3.2.0
+          image: ghcr.io/csornyei/mimir-health-coach-analyze:3.3.0
           resources:
             requests:
               memory: "256Mi"
@@ -62,7 +62,7 @@ spec:
 
       - name: summarize
         container:
-          image: ghcr.io/csornyei/mimir-health-coach-summarize:3.2.0
+          image: ghcr.io/csornyei/mimir-health-coach-summarize:3.3.0
           resources:
             requests:
               memory: "256Mi"
