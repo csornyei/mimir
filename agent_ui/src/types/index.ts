@@ -131,6 +131,36 @@ export interface BriefDetail {
     messages: BriefMessage[];
 }
 
+export interface HealthMetricSummary {
+    hrv_avg: number | null;
+    resting_hr_avg: number | null;
+    sleep_total_h: number | null;
+    sleep_deep_h: number | null;
+    sleep_rem_h: number | null;
+    sleep_efficiency_pct: number | null;
+    steps_avg: number | null;
+    active_kcal_avg: number | null;
+    exercise_min_avg: number | null;
+    total_distance_km: number | null;
+    avg_tdee: number | null;
+    vo2_max: number | null;
+    weight_kg_avg: number | null;
+    body_fat_pct_avg: number | null;
+}
+
+export interface HealthWeekSummary {
+    week_start: string;
+    week_end: string;
+    created_at: string;
+    has_analysis: boolean;
+}
+
+export interface HealthWeekDetail extends HealthWeekSummary {
+    analysis_md: string | null;
+    metrics: HealthMetricSummary;
+    snapshot_created_at: string;
+}
+
 // Server → Client
 export type ServerEvent =
     | { type: "connected" }

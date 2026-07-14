@@ -14,7 +14,7 @@ spec:
     templates:
       - name: run-briefing
         container:
-          image: ghcr.io/csornyei/mimir-morning-briefing:3.2.0
+          image: ghcr.io/csornyei/mimir-morning-briefing:3.3.0
           resources:
             requests:
               memory: "256Mi"

@@ -1,5 +1,10 @@
 import { useNavigate, Link } from "react-router";
-import { BookOpenIcon, RssIcon, PlusIcon } from "@phosphor-icons/react";
+import {
+    BookOpenIcon,
+    HeartIcon,
+    RssIcon,
+    PlusIcon,
+} from "@phosphor-icons/react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -119,6 +124,13 @@ export function LeftSidebar({ onOpenSearch }: LeftSidebarProps) {
                 >
                     <RssIcon className="h-4 w-4" />
                     RSS Digest
+                </Link>
+                <Link
+                    to="/health"
+                    className="text-muted-foreground hover:text-foreground hover:bg-accent flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors"
+                >
+                    <HeartIcon className="h-4 w-4" />
+                    Health Coach
                 </Link>
                 <ThemeToggle />
             </nav>

@@ -34,7 +34,7 @@ spec:
 
       - name: fetch
         container:
-          image: ghcr.io/csornyei/mimir-rss-fetcher:3.2.0
+          image: ghcr.io/csornyei/mimir-rss-fetcher:3.3.0
           args:
             - "--start"
             - "0"
@@ -78,7 +78,7 @@ spec:
 
       - name: summarize
         container:
-          image: ghcr.io/csornyei/mimir-rss-summarizer:3.2.0
+          image: ghcr.io/csornyei/mimir-rss-summarizer:3.3.0
           args:
             - "--input"
             - "/workflow/articles.json"
@@ -116,7 +116,7 @@ spec:
 
       - name: collect
         container:
-          image: ghcr.io/csornyei/mimir-rss-collector:3.2.0
+          image: ghcr.io/csornyei/mimir-rss-collector:3.3.0
           args:
             - "--input"
             - "/workflow/summaries.json"

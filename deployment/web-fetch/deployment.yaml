@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: mimir-web-fetch
-          image: ghcr.io/csornyei/mimir-web_fetch:3.2.0
+          image: ghcr.io/csornyei/mimir-web_fetch:3.3.0
           imagePullPolicy: IfNotPresent
           args:
             - "uv"
