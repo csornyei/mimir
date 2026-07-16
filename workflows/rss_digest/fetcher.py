@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +13,7 @@ from shared.logger import logger
 from shared.telemetry import setup_tracing
 from shared.tokens import truncate_to_tokens
 from workflows.config import workflow_config as config
+from workflows.rss_digest.window import resolve_window
 
 _tracer = trace.get_tracer("mimir.workflows.rss_digest.fetcher")
 
@@ -84,12 +85,24 @@ async def fetch(
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RSS digest fetcher pod")
     parser.add_argument(
-        "--start", type=int, required=True, help="Window start hour (UTC, 0-23)"
+        "--start",
+        type=int,
+        default=None,
+        help="Window start hour (UTC, 0-23). Defaults to the previous window.",
     )
     parser.add_argument(
-        "--end", type=int, required=True, help="Window end hour (UTC, 0-23)"
+        "--end",
+        type=int,
+        default=None,
+        help="Window end hour (UTC, 0-23). Defaults to the previous window.",
     )
     parser.add_argument("--label", type=str, help="Window label (e.g. '08-12')")
+    parser.add_argument(
+        "--window-hours",
+        type=int,
+        default=6,
+        help="Window size to infer when --start/--end are omitted.",
+    )
     parser.add_argument(
         "--output",
         type=str,
@@ -102,15 +115,15 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     setup_tracing(service_name=config.service_name)
     args = _parse_args()
-    now = datetime.now(UTC)
-    w_end = now.replace(hour=args.end, minute=0, second=0, microsecond=0)
-    w_start = now.replace(hour=args.start, minute=0, second=0, microsecond=0)
-    if args.start > args.end:  # window crosses midnight — start was yesterday
-        w_start -= timedelta(days=1)
-    w_label = args.label or f"{args.start:02d}-{args.end:02d}"
+    window = resolve_window(
+        start_hour=args.start,
+        end_hour=args.end,
+        label=args.label,
+        window_hours=args.window_hours,
+    )
 
     _require_config()
-    articles = asyncio.run(fetch(w_start, w_end, w_label))
+    articles = asyncio.run(fetch(window.start, window.end, window.label))
 
     Path(args.output).write_text(json.dumps(articles), encoding="utf-8")
 

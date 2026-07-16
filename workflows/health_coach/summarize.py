@@ -6,9 +6,15 @@ from zoneinfo import ZoneInfo
 import httpx
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from shared.db import dispose_db, get_session, initialize_db
+from shared.db_errors import (
+    DatabaseConnectionError,
+    database_error_context,
+    is_database_error,
+    to_database_connection_error,
+)
 from shared.file_api import get_file_api_client
 from shared.logger import logger
 from shared.models import HealthAnalysis
@@ -16,9 +22,12 @@ from shared.prompts.loader import render
 from shared.schemas import LLMSettings, Message, RawChatRequest
 from shared.telemetry import setup_tracing
 from workflows.config import workflow_config as config
+from workflows.health_coach.dates import parse_week_start
 
 setup_tracing(service_name=config.service_name)
 _tracer = trace.get_tracer("mimir.workflows.health_coach.summarize")
+_DB_SECRET_REF = "mimir-db-secret/postgres-url in the argo namespace"
+_WORKFLOW_NAME = "Health summarize"
 
 
 def validate_config() -> bool:
@@ -102,6 +111,26 @@ async def run(week_start: date) -> None:
 
         logger.info("health_summarize", week_start=str(week_start))
 
+        try:
+            async with get_session() as session:
+                await session.execute(text("SELECT 1"))
+        except Exception as exc:
+            logger.error(
+                "health_summarize_database_failed",
+                **database_error_context(
+                    database_url=config.database_url,
+                    exc=exc,
+                    workflow_name=_WORKFLOW_NAME,
+                    secret_ref=_DB_SECRET_REF,
+                ),
+            )
+            raise to_database_connection_error(
+                database_url=config.database_url,
+                exc=exc,
+                workflow_name=_WORKFLOW_NAME,
+                secret_ref=_DB_SECRET_REF,
+            ) from None
+
         analysis = await get_analysis(week_start)
         if analysis is None:
             logger.error(
@@ -136,22 +165,71 @@ def main() -> None:
     args = _parse_args()
     _require_config()
 
-    if args.week_start:
+    parsed_week_start: date | None = None
+    if args.week_start is not None:
         try:
-            week_start = date.fromisoformat(args.week_start)
+            parsed_week_start = parse_week_start(args.week_start)
         except ValueError as exc:
             logger.error(
                 "health_summarize_invalid_date", date=args.week_start, error=str(exc)
             )
             raise
+    if parsed_week_start is not None:
+        week_start = parsed_week_start
     else:
         week_start = get_week_start(config.timezone or "UTC")
 
     async def _run() -> None:
-        initialize_db(config.database_url)
+        try:
+            initialize_db(config.database_url)
+        except Exception as exc:
+            logger.error(
+                "health_summarize_database_init_failed",
+                **database_error_context(
+                    database_url=config.database_url,
+                    exc=exc,
+                    workflow_name=_WORKFLOW_NAME,
+                    secret_ref=_DB_SECRET_REF,
+                ),
+            )
+            raise to_database_connection_error(
+                database_url=config.database_url,
+                exc=exc,
+                workflow_name=_WORKFLOW_NAME,
+                secret_ref=_DB_SECRET_REF,
+            ) from None
         try:
             await run(week_start)
+        except DatabaseConnectionError as e:
+            logger.error(
+                "health_summarize_failed",
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            raise
         except Exception as e:
+            if is_database_error(e):
+                logger.error(
+                    "health_summarize_database_failed",
+                    **database_error_context(
+                        database_url=config.database_url,
+                        exc=e,
+                        workflow_name=_WORKFLOW_NAME,
+                        secret_ref=_DB_SECRET_REF,
+                    ),
+                )
+                db_error = to_database_connection_error(
+                    database_url=config.database_url,
+                    exc=e,
+                    workflow_name=_WORKFLOW_NAME,
+                    secret_ref=_DB_SECRET_REF,
+                )
+                logger.error(
+                    "health_summarize_failed",
+                    error=str(db_error),
+                    error_type=type(db_error).__name__,
+                )
+                raise db_error from None
             logger.error(
                 "health_summarize_failed",
                 error=str(e),

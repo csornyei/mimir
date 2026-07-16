@@ -11,6 +11,10 @@ spec:
   workflowSpec:
     serviceAccountName: argo-workflow
     entrypoint: health-analysis
+    arguments:
+      parameters:
+        - name: week-start
+          value: ""
     templates:
       - name: health-analysis
         dag:
@@ -23,7 +27,10 @@ spec:
 
       - name: analyze
         container:
-          image: ghcr.io/csornyei/mimir-health-coach-analyze:3.3.0
+          image: ghcr.io/csornyei/mimir-health-coach-analyze:3.3.1
+          args:
+            - "--week-start"
+            - "{{workflow.parameters.week-start}}"
           resources:
             requests:
               memory: "256Mi"
@@ -62,7 +69,10 @@ spec:
 
       - name: summarize
         container:
-          image: ghcr.io/csornyei/mimir-health-coach-summarize:3.3.0
+          image: ghcr.io/csornyei/mimir-health-coach-summarize:3.3.1
+          args:
+            - "--week-start"
+            - "{{workflow.parameters.week-start}}"
           resources:
             requests:
               memory: "256Mi"

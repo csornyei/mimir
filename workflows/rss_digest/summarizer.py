@@ -15,6 +15,7 @@ from shared.schemas import LLMSettings, Message, RawChatRequest
 from shared.telemetry import setup_tracing
 from workflows.config import workflow_config as config
 from workflows.rss_digest.prompt import build_summarize_prompt
+from workflows.rss_digest.window import resolve_window
 
 _tracer = trace.get_tracer("mimir.workflows.rss_digest.summarizer")
 
@@ -164,7 +165,13 @@ def _parse_args() -> argparse.Namespace:
         "--start",
         type=int,
         default=None,
-        help="Window start hour (UTC, 0-23) — used to build the run conversation ID",
+        help="Window start hour (UTC, 0-23). Defaults to the previous window.",
+    )
+    parser.add_argument(
+        "--window-hours",
+        type=int,
+        default=6,
+        help="Window size to infer when --start is omitted.",
     )
     return parser.parse_args()
 
@@ -182,7 +189,10 @@ def main() -> None:
         raise
 
     _require_config()
-    start_hour = args.start if args.start is not None else datetime.now(UTC).hour
+    if args.start is None:
+        start_hour = resolve_window(window_hours=args.window_hours).start.hour
+    else:
+        start_hour = args.start
     conversation_id = (
         f"rss_digest|{datetime.now(UTC).strftime('%Y-%m-%d')}--{start_hour:02d}"
     )

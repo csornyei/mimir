@@ -7,16 +7,21 @@ from typing import Any
 
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from shared.db import dispose_db, get_session, initialize_db
+from shared.db_errors import database_error_context, to_database_connection_error
 from shared.external.ntfy import send_ntfy
 from shared.logger import logger
 from shared.models import RssDigestEntry
 from shared.telemetry import setup_tracing
 from workflows.config import workflow_config as config
+from workflows.rss_digest.window import resolve_window
 
 _tracer = trace.get_tracer("mimir.workflows.rss_digest.collector")
+_DB_SECRET_REF = "mimir-db-secret/postgres-url in the argo namespace"
+_WORKFLOW_NAME = "RSS collector"
 
 
 def validate_config() -> bool:
@@ -52,36 +57,54 @@ async def collect(summaries: list[dict[str, Any]], window_label: str) -> int:
     now = datetime.now(UTC)
 
     with _tracer.start_as_current_span("store_digest_entries", kind=SpanKind.INTERNAL):
-        async with get_session() as session:
-            for pick in picks:
-                stmt = pg_insert(RssDigestEntry).values(
-                    miniflux_entry_id=pick.get("id", 0),
-                    title=pick.get("title", ""),
-                    url=_resolve_url(pick),
-                    feed_name=pick.get("feed_name"),
-                    category=pick.get("category"),
-                    digest_run_at=now,
-                    window=window_label,
-                    summary=pick.get("summary"),
-                    tags=pick.get("tags"),
-                    interesting_score=pick.get("interesting_score"),
-                    relevance_score=pick.get("relevance_score"),
-                )
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["miniflux_entry_id", "window"],
-                    set_={
-                        "title": stmt.excluded.title,
-                        "url": stmt.excluded.url,
-                        "feed_name": stmt.excluded.feed_name,
-                        "category": stmt.excluded.category,
-                        "digest_run_at": stmt.excluded.digest_run_at,
-                        "summary": stmt.excluded.summary,
-                        "tags": stmt.excluded.tags,
-                        "interesting_score": stmt.excluded.interesting_score,
-                        "relevance_score": stmt.excluded.relevance_score,
-                    },
-                )
-                await session.execute(stmt)
+        try:
+            async with get_session() as session:
+                await session.execute(text("SELECT 1"))
+                for pick in picks:
+                    stmt = pg_insert(RssDigestEntry).values(
+                        miniflux_entry_id=pick.get("id", 0),
+                        title=pick.get("title", ""),
+                        url=_resolve_url(pick),
+                        feed_name=pick.get("feed_name"),
+                        category=pick.get("category"),
+                        digest_run_at=now,
+                        window=window_label,
+                        summary=pick.get("summary"),
+                        tags=pick.get("tags"),
+                        interesting_score=pick.get("interesting_score"),
+                        relevance_score=pick.get("relevance_score"),
+                    )
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["miniflux_entry_id", "window"],
+                        set_={
+                            "title": stmt.excluded.title,
+                            "url": stmt.excluded.url,
+                            "feed_name": stmt.excluded.feed_name,
+                            "category": stmt.excluded.category,
+                            "digest_run_at": stmt.excluded.digest_run_at,
+                            "summary": stmt.excluded.summary,
+                            "tags": stmt.excluded.tags,
+                            "interesting_score": stmt.excluded.interesting_score,
+                            "relevance_score": stmt.excluded.relevance_score,
+                        },
+                    )
+                    await session.execute(stmt)
+        except Exception as exc:
+            logger.error(
+                "rss_collector_database_failed",
+                **database_error_context(
+                    database_url=config.database_url,
+                    exc=exc,
+                    workflow_name=_WORKFLOW_NAME,
+                    secret_ref=_DB_SECRET_REF,
+                ),
+            )
+            raise to_database_connection_error(
+                database_url=config.database_url,
+                exc=exc,
+                workflow_name=_WORKFLOW_NAME,
+                secret_ref=_DB_SECRET_REF,
+            ) from None
 
     logger.info(
         "rss_collector_stored",
@@ -115,6 +138,12 @@ def _parse_args() -> argparse.Namespace:
         help="Path to the summaries JSON list",
     )
     parser.add_argument("--label", type=str, help="Window label (e.g. '08-12')")
+    parser.add_argument(
+        "--window-hours",
+        type=int,
+        default=6,
+        help="Window size to infer when --label is omitted.",
+    )
     return parser.parse_args()
 
 
@@ -125,10 +154,27 @@ def main() -> None:
     summaries: list[dict[str, Any]] = json.loads(
         Path(args.input).read_text(encoding="utf-8")
     )
-    window_label = args.label or "unknown"
+    window_label = args.label or resolve_window(window_hours=args.window_hours).label
 
     async def _run() -> None:
-        initialize_db(config.database_url)
+        try:
+            initialize_db(config.database_url)
+        except Exception as exc:
+            logger.error(
+                "rss_collector_database_init_failed",
+                **database_error_context(
+                    database_url=config.database_url,
+                    exc=exc,
+                    workflow_name=_WORKFLOW_NAME,
+                    secret_ref=_DB_SECRET_REF,
+                ),
+            )
+            raise to_database_connection_error(
+                database_url=config.database_url,
+                exc=exc,
+                workflow_name=_WORKFLOW_NAME,
+                secret_ref=_DB_SECRET_REF,
+            ) from None
         try:
             await collect(summaries, window_label)
         finally:

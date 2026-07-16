@@ -5,7 +5,7 @@ metadata:
   namespace: argo
 spec:
   schedules:
-    - "10 6 * * *"
+    - "10 0,6,12,18 * * *"
   timezone: "UTC"
   concurrencyPolicy: Forbid
   workflowSpec:
@@ -34,14 +34,8 @@ spec:
 
       - name: fetch
         container:
-          image: ghcr.io/csornyei/mimir-rss-fetcher:3.3.0
+          image: ghcr.io/csornyei/mimir-rss-fetcher:3.3.1
           args:
-            - "--start"
-            - "0"
-            - "--end"
-            - "6"
-            - "--label"
-            - "00-06"
             - "--output"
             - "/workflow/articles.json"
           volumeMounts:
@@ -78,14 +72,12 @@ spec:
 
       - name: summarize
         container:
-          image: ghcr.io/csornyei/mimir-rss-summarizer:3.3.0
+          image: ghcr.io/csornyei/mimir-rss-summarizer:3.3.1
           args:
             - "--input"
             - "/workflow/articles.json"
             - "--output"
             - "/workflow/summaries.json"
-            - "--start"
-            - "0"
           volumeMounts:
             - name: rss-workdir
               mountPath: /workflow
@@ -116,12 +108,10 @@ spec:
 
       - name: collect
         container:
-          image: ghcr.io/csornyei/mimir-rss-collector:3.3.0
+          image: ghcr.io/csornyei/mimir-rss-collector:3.3.1
           args:
             - "--input"
             - "/workflow/summaries.json"
-            - "--label"
-            - "00-06"
           volumeMounts:
             - name: rss-workdir
               mountPath: /workflow
